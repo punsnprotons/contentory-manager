@@ -1,20 +1,18 @@
 
+import React from "react";
 import { Outlet } from "react-router-dom";
-import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
-import { SidebarProvider } from "@/components/ui/sidebar";
+import HeaderWrapper from "@/components/layout/Header.wrapper";
 
-const Index = () => {
+const Index: React.FC = () => {
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
-      <div className="flex flex-1 overflow-hidden">
-        <SidebarProvider>
-          <Sidebar />
-          <main className="flex-1 overflow-y-auto p-6">
-            <Outlet />
-          </main>
-        </SidebarProvider>
+    <div className="flex min-h-screen flex-col">
+      <HeaderWrapper />
+      <div className="flex flex-1">
+        <Sidebar />
+        <main className="flex-1 p-6 bg-muted/20">
+          <Outlet />
+        </main>
       </div>
     </div>
   );
