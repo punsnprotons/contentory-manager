@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -44,11 +44,6 @@ const Auth: React.FC = () => {
           description: error.message,
           variant: 'destructive',
         });
-      } else {
-        toast({
-          title: 'Success',
-          description: 'You are now logged in',
-        });
       }
     } finally {
       setIsSubmitting(false);
@@ -85,11 +80,6 @@ const Auth: React.FC = () => {
           title: 'Registration failed',
           description: error.message,
           variant: 'destructive',
-        });
-      } else {
-        toast({
-          title: 'Success',
-          description: 'Account created successfully. Check your email for confirmation.',
         });
       }
     } finally {

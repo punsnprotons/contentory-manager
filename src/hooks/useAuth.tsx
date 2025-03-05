@@ -3,6 +3,7 @@ import { useState, useEffect, createContext, useContext } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
+import { toast } from '@/hooks/use-toast';
 
 type AuthContextType = {
   session: Session | null;
@@ -36,6 +37,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log("Auth state changed:", _event, session?.user?.email);
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -48,6 +50,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (!error) {
+        toast({
+          title: "Success",
+          description: "You have successfully signed in",
+        });
         navigate('/dashboard');
       }
       return { error };
@@ -58,10 +64,40 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signUp = async (email: string, password: string) => {
     try {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      // Set data.email_confirm to true to auto-confirm email
+      const { data, error } = await supabase.auth.signUp({ 
+        email, 
+        password,
+        options: {
+          data: {
+            email_confirmed: true
+          },
+          emailRedirectTo: window.location.origin + '/auth',
+        }
+      });
+      
       if (!error) {
-        navigate('/dashboard');
+        // Since we want to auto-login after signup, let's sign in immediately
+        const { error: signInError } = await supabase.auth.signInWithPassword({ 
+          email, 
+          password 
+        });
+        
+        if (!signInError) {
+          toast({
+            title: "Success",
+            description: "Account created and logged in successfully",
+          });
+          navigate('/dashboard');
+        } else {
+          toast({
+            title: "Sign in failed after registration",
+            description: signInError.message,
+            variant: "destructive",
+          });
+        }
       }
+      
       return { error, data };
     } catch (err) {
       return { error: err as Error, data: null };
