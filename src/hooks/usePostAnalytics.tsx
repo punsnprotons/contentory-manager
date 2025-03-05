@@ -324,6 +324,42 @@ export const usePostAnalytics = () => {
       // Fetch platform statistics even when we have posts
       await fetchAndSetPlatformStatistics(userData.id);
       
+      // Calculate platform distribution based on post counts rather than relying on engagement
+      const instagramPosts = transformedPosts.filter(post => post.platform === 'instagram').length;
+      const twitterPosts = transformedPosts.filter(post => post.platform === 'twitter').length;
+      const totalPosts = instagramPosts + twitterPosts;
+      
+      if (totalPosts > 0) {
+        const instagramPercentage = Math.round((instagramPosts / totalPosts) * 100);
+        setPlatformDistribution({
+          instagram: instagramPercentage,
+          twitter: 100 - instagramPercentage
+        });
+      } else {
+        setPlatformDistribution({
+          instagram: 50,
+          twitter: 50
+        });
+      }
+      
+      // Directly query content metrics table to get total likes, comments, shares, and views
+      const { data: aggregateMetrics, error: aggregateError } = await supabase
+        .from('content_metrics')
+        .select('likes, comments, shares, views')
+        .in('content_id', transformedPosts.map(post => post.id));
+        
+      if (aggregateError) {
+        console.error("Error fetching aggregate metrics:", aggregateError);
+      } else if (aggregateMetrics && aggregateMetrics.length > 0) {
+        // Calculate total engagement metrics from actual metrics data
+        const totalLikes = aggregateMetrics.reduce((total, metric) => total + (metric.likes || 0), 0);
+        const totalComments = aggregateMetrics.reduce((total, metric) => total + (metric.comments || 0), 0);
+        const totalShares = aggregateMetrics.reduce((total, metric) => total + (metric.shares || 0), 0);
+        const totalViews = aggregateMetrics.reduce((total, metric) => total + (metric.views || 0), 0);
+        
+        console.log(`Total engagement metrics: Likes: ${totalLikes}, Comments: ${totalComments}, Shares: ${totalShares}, Views: ${totalViews}`);
+      }
+      
     } catch (err) {
       console.error('Error fetching posts with analytics:', err);
       setError(err instanceof Error ? err : new Error('Unknown error occurred'));
@@ -379,7 +415,10 @@ export const usePostAnalytics = () => {
         .lte('period_end', lastDay.toISOString().split('T')[0])
         .order('created_at', { ascending: false });
       
-      if (currentStatsError) throw currentStatsError;
+      if (currentStatsError) {
+        console.error("Error fetching current platform statistics:", currentStatsError);
+        throw currentStatsError;
+      }
       
       // Fetch previous month statistics
       const { data: prevStats, error: prevStatsError } = await supabase
@@ -390,7 +429,13 @@ export const usePostAnalytics = () => {
         .lte('period_end', prevEnd.toISOString().split('T')[0])
         .order('created_at', { ascending: false });
       
-      if (prevStatsError) throw prevStatsError;
+      if (prevStatsError) {
+        console.error("Error fetching previous platform statistics:", prevStatsError);
+        throw prevStatsError;
+      }
+      
+      console.log("Current platform statistics:", currentStats);
+      console.log("Previous platform statistics:", prevStats);
       
       // Process follower metrics
       const currentInstagramStats = currentStats?.find(stat => stat.platform === 'instagram');
@@ -451,65 +496,57 @@ export const usePostAnalytics = () => {
         trend: engagementRateTrend
       });
       
-      // Calculate posts this month if we don't have that data yet from content
-      if (postsThisMonth === 0) {
-        // For postsThisMonth, directly query the content table to ensure accuracy
-        const currentMonth = new Date().getMonth();
-        const currentYear = new Date().getFullYear();
+      // For postsThisMonth, directly query the content table 
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+      
+      // Query for posts this month
+      const { data: monthlyPosts, error: monthlyPostsError } = await supabase
+        .from('content')
+        .select('id, platform')
+        .eq('user_id', userId)
+        .eq('status', 'published')
+        .gte('published_at', new Date(currentYear, currentMonth, 1).toISOString())
+        .lte('published_at', new Date(currentYear, currentMonth + 1, 0).toISOString());
         
-        // Query for Instagram posts this month
-        const { data: instagramPosts, error: instagramError } = await supabase
-          .from('content')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('status', 'published')
-          .eq('platform', 'instagram')
-          .gte('published_at', new Date(currentYear, currentMonth, 1).toISOString())
-          .lte('published_at', new Date(currentYear, currentMonth + 1, 0).toISOString());
-          
-        if (instagramError) {
-          console.error("Error fetching Instagram posts count:", instagramError);
-        }
+      if (monthlyPostsError) {
+        console.error("Error fetching monthly posts:", monthlyPostsError);
+      } else if (monthlyPosts) {
+        // Calculate instagram vs twitter posts
+        const instagramPostCount = monthlyPosts.filter(post => post.platform === 'instagram').length;
+        const twitterPostCount = monthlyPosts.filter(post => post.platform === 'twitter').length;
+        const totalPosts = monthlyPosts.length;
         
-        // Query for Twitter posts this month
-        const { data: twitterPosts, error: twitterError } = await supabase
-          .from('content')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('status', 'published')
-          .eq('platform', 'twitter')
-          .gte('published_at', new Date(currentYear, currentMonth, 1).toISOString())
-          .lte('published_at', new Date(currentYear, currentMonth + 1, 0).toISOString());
-          
-        if (twitterError) {
-          console.error("Error fetching Twitter posts count:", twitterError);
-        }
-        
-        // Calculate total posts from direct queries
-        const instagramPostCount = instagramPosts?.length || 0;
-        const twitterPostCount = twitterPosts?.length || 0;
-        const totalPosts = instagramPostCount + twitterPostCount;
-        
-        console.log(`Directly counted posts: Instagram: ${instagramPostCount}, Twitter: ${twitterPostCount}, Total: ${totalPosts}`);
+        console.log(`Monthly posts count: Instagram: ${instagramPostCount}, Twitter: ${twitterPostCount}, Total: ${totalPosts}`);
         
         setPostsThisMonth(totalPosts);
+        
+        // Update platform distribution based on post counts
+        if (totalPosts > 0) {
+          const instagramPercentage = Math.round((instagramPostCount / totalPosts) * 100);
+          setPlatformDistribution({
+            instagram: instagramPercentage,
+            twitter: 100 - instagramPercentage
+          });
+        }
       }
       
-      // Update average reach if we don't have that data yet
-      if (avgReach === 0) {
-        const instagramReach = currentInstagramStats?.avg_reach_per_post || 0;
-        const twitterReach = currentTwitterStats?.avg_reach_per_post || 0;
+      // Fetch metrics for all user's content to get aggregate stats
+      const { data: allContentMetrics, error: allMetricsError } = await supabase
+        .from('content_metrics')
+        .select('content_id, likes, comments, shares, views')
+        .eq('content_id', userId);
         
-        // Only count platforms with posts
-        let platformsWithPosts = 0;
-        if (currentInstagramStats?.post_count && currentInstagramStats.post_count > 0) platformsWithPosts++;
-        if (currentTwitterStats?.post_count && currentTwitterStats.post_count > 0) platformsWithPosts++;
+      if (allMetricsError) {
+        console.error("Error fetching all content metrics:", allMetricsError);
+      } else if (allContentMetrics && allContentMetrics.length > 0) {
+        // Calculate total engagement metrics from actual metrics data
+        const totalLikes = allContentMetrics.reduce((total, metric) => total + (metric.likes || 0), 0);
+        const totalComments = allContentMetrics.reduce((total, metric) => total + (metric.comments || 0), 0);
+        const totalShares = allContentMetrics.reduce((total, metric) => total + (metric.shares || 0), 0);
+        const totalViews = allContentMetrics.reduce((total, metric) => total + (metric.views || 0), 0);
         
-        const newAvgReach = platformsWithPosts > 0 
-          ? Math.floor((instagramReach + twitterReach) / platformsWithPosts) 
-          : 0;
-          
-        setAvgReach(newAvgReach);
+        console.log(`Aggregate metrics from DB: Likes: ${totalLikes}, Comments: ${totalComments}, Shares: ${totalShares}, Views: ${totalViews}`);
       }
       
     } catch (err) {

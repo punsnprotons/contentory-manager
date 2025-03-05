@@ -1,4 +1,3 @@
-
 import React, { useEffect } from "react";
 import {
   BarChart as BarChartIcon,
@@ -39,7 +38,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     console.log("Dashboard mounted, refreshing data");
     refreshData();
-  }, []);
+  }, [refreshData]);
 
   // Count posts this month by platform
   const currentMonth = new Date().getMonth();
@@ -62,6 +61,14 @@ const Dashboard: React.FC = () => {
   ).length;
   
   console.log(`Dashboard client-side count: Instagram: ${instagramPostsThisMonth}, Twitter: ${twitterPostsThisMonth}`);
+
+  // Calculate total metrics across all content
+  const totalLikes = posts.reduce((total, post) => total + (post.metrics?.likes || 0), 0);
+  const totalComments = posts.reduce((total, post) => total + (post.metrics?.comments || 0), 0);
+  const totalShares = posts.reduce((total, post) => total + (post.metrics?.shares || 0), 0);
+  const totalViews = posts.reduce((total, post) => total + (post.metrics?.views || 0), 0);
+  
+  console.log(`Dashboard total metrics: Likes: ${totalLikes}, Comments: ${totalComments}, Shares: ${totalShares}, Views: ${totalViews}`);
 
   // Create metrics from real data
   const metrics: Metric[] = [
@@ -148,6 +155,7 @@ const Dashboard: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
+              {/* Instagram Distribution */}
               <div className="flex justify-between items-center">
                 <div className="flex items-center">
                   <div className="mr-2 h-4 w-4 rounded-full bg-pink-400" />
@@ -159,6 +167,7 @@ const Dashboard: React.FC = () => {
                 <div className="h-full bg-pink-400 rounded-full" style={{ width: `${platformDistribution.instagram}%` }} />
               </div>
 
+              {/* Twitter Distribution */}
               <div className="flex justify-between items-center">
                 <div className="flex items-center">
                   <div className="mr-2 h-4 w-4 rounded-full bg-blue-400" />
@@ -170,6 +179,7 @@ const Dashboard: React.FC = () => {
                 <div className="h-full bg-blue-400 rounded-full" style={{ width: `${platformDistribution.twitter}%` }} />
               </div>
 
+              {/* Post Counts */}
               <div className="pt-1 space-y-2">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-pink-500 font-medium">Instagram Posts:</span>
@@ -181,42 +191,26 @@ const Dashboard: React.FC = () => {
                 </div>
               </div>
 
+              {/* Engagement Metrics */}
               <div className="pt-4 space-y-2">
-                {/* Aggregate data from top performing content */}
                 <div className="flex items-center text-sm">
                   <Heart size={16} className="mr-2 text-red-500" />
-                  <span className="font-medium">
-                    {(!topPerformingContent || topPerformingContent.length === 0) ? 
-                      0 : 
-                      topPerformingContent.reduce((total, content) => total + (content.metrics?.likes || 0), 0).toLocaleString()}
-                  </span>
+                  <span className="font-medium">{totalLikes.toLocaleString()}</span>
                   <span className="text-muted-foreground ml-1">total likes</span>
                 </div>
                 <div className="flex items-center text-sm">
                   <MessageCircle size={16} className="mr-2 text-blue-500" />
-                  <span className="font-medium">
-                    {(!topPerformingContent || topPerformingContent.length === 0) ? 
-                      0 : 
-                      topPerformingContent.reduce((total, content) => total + (content.metrics?.comments || 0), 0).toLocaleString()}
-                  </span>
+                  <span className="font-medium">{totalComments.toLocaleString()}</span>
                   <span className="text-muted-foreground ml-1">comments</span>
                 </div>
                 <div className="flex items-center text-sm">
                   <Share2 size={16} className="mr-2 text-green-500" />
-                  <span className="font-medium">
-                    {(!topPerformingContent || topPerformingContent.length === 0) ? 
-                      0 : 
-                      topPerformingContent.reduce((total, content) => total + (content.metrics?.shares || 0), 0).toLocaleString()}
-                  </span>
+                  <span className="font-medium">{totalShares.toLocaleString()}</span>
                   <span className="text-muted-foreground ml-1">shares</span>
                 </div>
                 <div className="flex items-center text-sm">
                   <Eye size={16} className="mr-2 text-purple-500" />
-                  <span className="font-medium">
-                    {(!topPerformingContent || topPerformingContent.length === 0) ? 
-                      0 : 
-                      topPerformingContent.reduce((total, content) => total + (content.metrics?.views || 0), 0).toLocaleString()}
-                  </span>
+                  <span className="font-medium">{totalViews.toLocaleString()}</span>
                   <span className="text-muted-foreground ml-1">views</span>
                 </div>
               </div>
