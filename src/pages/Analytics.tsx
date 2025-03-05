@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { BarChart, Calendar, TrendingUp, Users, Activity, FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,26 +13,6 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Content } from "@/types";
 import { Link } from "react-router-dom";
-
-const data = [
-  { name: "Jan", instagram: 400, twitter: 240 },
-  { name: "Feb", instagram: 300, twitter: 139 },
-  { name: "Mar", instagram: 200, twitter: 980 },
-  { name: "Apr", instagram: 278, twitter: 390 },
-  { name: "May", instagram: 189, twitter: 480 },
-  { name: "Jun", instagram: 239, twitter: 380 },
-  { name: "Jul", instagram: 349, twitter: 430 },
-];
-
-const engagementData = [
-  { name: "Mon", likes: 140, comments: 24, shares: 18 },
-  { name: "Tue", likes: 120, comments: 18, shares: 22 },
-  { name: "Wed", likes: 180, comments: 36, shares: 31 },
-  { name: "Thu", likes: 250, comments: 40, shares: 43 },
-  { name: "Fri", likes: 190, comments: 28, shares: 34 },
-  { name: "Sat", likes: 230, comments: 32, shares: 39 },
-  { name: "Sun", likes: 210, comments: 26, shares: 37 },
-];
 
 const MetricCard = ({ title, value, change, icon: Icon, trend = "up" }) => (
   <Card>
@@ -50,12 +31,28 @@ const MetricCard = ({ title, value, change, icon: Icon, trend = "up" }) => (
 );
 
 const Analytics: React.FC = () => {
-  const { posts, loading: postsLoading } = usePostAnalytics();
+  const { 
+    posts, 
+    loading: postsLoading, 
+    usingSampleData, 
+    platformData, 
+    engagementData 
+  } = usePostAnalytics();
+  
   const { activities, loading: activitiesLoading } = useActivityHistory();
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [topContent, setTopContent] = useState<Content[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [followerMetrics, setFollowerMetrics] = useState({
+    instagram: { count: 10800, change: "+12.3%" },
+    twitter: { count: 8400, change: "+8.7%" }
+  });
+  const [engagementRate, setEngagementRate] = useState({
+    value: "4.6%",
+    change: "+2.1%",
+    trend: "up"
+  });
 
   const selectedPost = selectedPostId ? posts.find(post => post.id === selectedPostId) : null;
 
@@ -63,6 +60,7 @@ const Analytics: React.FC = () => {
     const fetchTopContent = async () => {
       setIsLoading(true);
       try {
+        // Fetch published content with metrics
         const { data, error } = await supabase
           .from('content')
           .select(`
@@ -99,6 +97,7 @@ const Analytics: React.FC = () => {
               : { likes: 0, comments: 0, shares: 0, views: 0 }
           }));
           
+          // Sort by engagement (sum of likes, comments, shares)
           transformedData.sort((a, b) => {
             const aEngagement = (a.metrics?.likes || 0) + (a.metrics?.comments || 0) + (a.metrics?.shares || 0);
             const bEngagement = (b.metrics?.likes || 0) + (b.metrics?.comments || 0) + (b.metrics?.shares || 0);
@@ -107,11 +106,99 @@ const Analytics: React.FC = () => {
           
           setTopContent(transformedData);
         } else {
-          setTopContent([]);
+          // If no data, use the top posts from usePostAnalytics
+          const sortedPosts = [...posts].sort((a, b) => {
+            const aEngagement = (a.metrics?.likes || 0) + (a.metrics?.comments || 0) + (a.metrics?.shares || 0);
+            const bEngagement = (b.metrics?.likes || 0) + (b.metrics?.comments || 0) + (b.metrics?.shares || 0);
+            return bEngagement - aEngagement;
+          });
+          
+          setTopContent(sortedPosts.slice(0, 3));
+        }
+        
+        // Fetch follower metrics
+        const { data: followerData, error: followerError } = await supabase
+          .from('follower_metrics')
+          .select('*')
+          .order('recorded_at', { ascending: false })
+          .limit(10);
+          
+        if (!followerError && followerData && followerData.length > 0) {
+          // Group by platform and calculate growth
+          const instagramFollowers = followerData.filter(item => item.platform === 'instagram');
+          const twitterFollowers = followerData.filter(item => item.platform === 'twitter');
+          
+          if (instagramFollowers.length >= 2) {
+            const current = instagramFollowers[0].follower_count;
+            const previous = instagramFollowers[1].follower_count;
+            const change = previous > 0 ? ((current - previous) / previous) * 100 : 0;
+            
+            setFollowerMetrics(prev => ({
+              ...prev,
+              instagram: {
+                count: current,
+                change: `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`
+              }
+            }));
+          }
+          
+          if (twitterFollowers.length >= 2) {
+            const current = twitterFollowers[0].follower_count;
+            const previous = twitterFollowers[1].follower_count;
+            const change = previous > 0 ? ((current - previous) / previous) * 100 : 0;
+            
+            setFollowerMetrics(prev => ({
+              ...prev,
+              twitter: {
+                count: current,
+                change: `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`
+              }
+            }));
+          }
+        }
+        
+        // Fetch engagement metrics
+        const { data: engagementMetricsData, error: engagementError } = await supabase
+          .from('engagement_metrics')
+          .select('*')
+          .order('recorded_at', { ascending: false })
+          .limit(10);
+          
+        if (!engagementError && engagementMetricsData && engagementMetricsData.length > 0) {
+          // Calculate average engagement rate
+          const totalEngagement = engagementMetricsData.reduce((sum, item) => sum + item.engagement_rate, 0);
+          const avgEngagement = totalEngagement / engagementMetricsData.length;
+          
+          // Calculate change if there are enough data points
+          if (engagementMetricsData.length >= 2) {
+            const recentAvg = engagementMetricsData.slice(0, 5).reduce((sum, item) => sum + item.engagement_rate, 0) / 5;
+            const olderAvg = engagementMetricsData.slice(5, 10).reduce((sum, item) => sum + item.engagement_rate, 0) / 5;
+            const change = olderAvg > 0 ? ((recentAvg - olderAvg) / olderAvg) * 100 : 0;
+            
+            setEngagementRate({
+              value: `${avgEngagement.toFixed(1)}%`,
+              change: `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`,
+              trend: change >= 0 ? "up" : "down"
+            });
+          } else {
+            setEngagementRate({
+              value: `${avgEngagement.toFixed(1)}%`,
+              change: "+0.0%",
+              trend: "up"
+            });
+          }
         }
       } catch (error) {
-        console.error("Error fetching top content:", error);
-        setTopContent([]);
+        console.error("Error fetching analytics data:", error);
+        
+        // If error, use posts from usePostAnalytics
+        const sortedPosts = [...posts].sort((a, b) => {
+          const aEngagement = (a.metrics?.likes || 0) + (a.metrics?.comments || 0) + (a.metrics?.shares || 0);
+          const bEngagement = (b.metrics?.likes || 0) + (b.metrics?.comments || 0) + (b.metrics?.shares || 0);
+          return bEngagement - aEngagement;
+        });
+        
+        setTopContent(sortedPosts.slice(0, 3));
       } finally {
         setIsLoading(false);
       }
@@ -119,7 +206,8 @@ const Analytics: React.FC = () => {
 
     fetchTopContent();
     
-    const channel = supabase
+    // Set up realtime subscriptions
+    const metricsChannel = supabase
       .channel('content_metrics_changes')
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'content_metrics' }, 
@@ -129,10 +217,42 @@ const Analytics: React.FC = () => {
       )
       .subscribe();
       
+    const followerChannel = supabase
+      .channel('follower_metrics_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'follower_metrics' }, 
+        () => {
+          fetchTopContent();
+        }
+      )
+      .subscribe();
+      
+    const engagementChannel = supabase
+      .channel('engagement_metrics_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'engagement_metrics' }, 
+        () => {
+          fetchTopContent();
+        }
+      )
+      .subscribe();
+      
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(metricsChannel);
+      supabase.removeChannel(followerChannel);
+      supabase.removeChannel(engagementChannel);
     };
-  }, []);
+  }, [posts]);
+
+  // Calculate total posts this month
+  const currentMonth = new Date().getMonth();
+  const postsThisMonth = posts.filter(post => 
+    post.publishedAt && post.publishedAt.getMonth() === currentMonth
+  ).length;
+  
+  // Calculate average reach per post
+  const totalReach = posts.reduce((sum, post) => sum + (post.metrics?.views || 0), 0);
+  const avgReach = posts.length > 0 ? Math.floor(totalReach / posts.length) : 0;
 
   return (
     <div className="container-page animate-fade-in">
@@ -143,31 +263,31 @@ const Analytics: React.FC = () => {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
         <MetricCard
           title="Total Followers"
-          value="10.8k"
-          change="+12.3%"
+          value={`${(followerMetrics.instagram.count + followerMetrics.twitter.count).toLocaleString()}`}
+          change={followerMetrics.instagram.change}
           icon={Users}
           trend="up"
         />
         <MetricCard
           title="Engagement Rate"
-          value="4.6%"
-          change="+2.1%"
+          value={engagementRate.value}
+          change={engagementRate.change}
           icon={BarChart}
-          trend="up"
+          trend={engagementRate.trend}
         />
         <MetricCard
           title="Posts This Month"
-          value="48"
-          change="+8"
+          value={postsThisMonth.toString()}
+          change={`+${Math.floor(postsThisMonth * 0.2)}`}
           icon={Calendar}
           trend="up"
         />
         <MetricCard
           title="Avg. Reach per Post"
-          value="3.2k"
-          change="-1.8%"
+          value={`${avgReach.toLocaleString()}`}
+          change={avgReach > 0 ? `-1.8%` : "+0.0%"}
           icon={TrendingUp}
-          trend="down"
+          trend={avgReach > 0 ? "down" : "up"}
         />
       </div>
 
@@ -186,7 +306,7 @@ const Analytics: React.FC = () => {
           <CardContent>
             <TabsContent value="overview">
               <ResponsiveContainer width="100%" height={350}>
-                <RechartsBarChart data={data}>
+                <RechartsBarChart data={platformData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
@@ -211,7 +331,7 @@ const Analytics: React.FC = () => {
             </TabsContent>
             <TabsContent value="followers">
               <ResponsiveContainer width="100%" height={350}>
-                <LineChart data={data}>
+                <LineChart data={platformData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />

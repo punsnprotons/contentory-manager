@@ -62,6 +62,8 @@ export const usePostAnalytics = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [usingSampleData, setUsingSampleData] = useState(false);
+  const [platformData, setPlatformData] = useState<any[]>([]);
+  const [engagementData, setEngagementData] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchPostsWithAnalytics = async () => {
@@ -83,6 +85,31 @@ export const usePostAnalytics = () => {
           console.log("No published posts found, using sample data");
           setPosts(samplePosts);
           setUsingSampleData(true);
+          
+          // Generate sample platform data for charts
+          const samplePlatformData = [
+            { name: "Jan", instagram: 400, twitter: 240 },
+            { name: "Feb", instagram: 300, twitter: 139 },
+            { name: "Mar", instagram: 200, twitter: 980 },
+            { name: "Apr", instagram: 278, twitter: 390 },
+            { name: "May", instagram: 189, twitter: 480 },
+            { name: "Jun", instagram: 239, twitter: 380 },
+            { name: "Jul", instagram: 349, twitter: 430 },
+          ];
+          
+          // Generate sample engagement data for charts
+          const sampleEngagementData = [
+            { name: "Mon", likes: 140, comments: 24, shares: 18 },
+            { name: "Tue", likes: 120, comments: 18, shares: 22 },
+            { name: "Wed", likes: 180, comments: 36, shares: 31 },
+            { name: "Thu", likes: 250, comments: 40, shares: 43 },
+            { name: "Fri", likes: 190, comments: 28, shares: 34 },
+            { name: "Sat", likes: 230, comments: 32, shares: 39 },
+            { name: "Sun", likes: 210, comments: 26, shares: 37 },
+          ];
+          
+          setPlatformData(samplePlatformData);
+          setEngagementData(sampleEngagementData);
           setLoading(false);
           return;
         }
@@ -98,7 +125,7 @@ export const usePostAnalytics = () => {
         if (metricsError) throw metricsError;
         
         // Create a map of metrics by content ID
-        const metricsMap = metricsData.reduce((acc, metric) => {
+        const metricsMap = metricsData?.reduce((acc, metric) => {
           acc[metric.content_id] = {
             likes: metric.likes,
             comments: metric.comments,
@@ -106,7 +133,7 @@ export const usePostAnalytics = () => {
             views: metric.views
           };
           return acc;
-        }, {} as Record<string, { likes: number, comments: number, shares: number, views: number }>);
+        }, {} as Record<string, { likes: number, comments: number, shares: number, views: number }>) || {};
         
         // Transform posts data with metrics
         const transformedPosts: Content[] = postsData.map(post => ({
@@ -125,12 +152,124 @@ export const usePostAnalytics = () => {
         
         setPosts(transformedPosts);
         setUsingSampleData(false);
+        
+        // Fetch platform metrics data for charting
+        const { data: performanceData, error: performanceError } = await supabase
+          .from('performance_metrics')
+          .select('*')
+          .order('created_at', { ascending: true });
+          
+        if (performanceError) throw performanceError;
+        
+        // Generate real platform data for charts if available
+        if (performanceData && performanceData.length > 0) {
+          // Group by month and platform
+          const monthlyData = performanceData.reduce((acc, item) => {
+            const date = new Date(item.created_at);
+            const month = date.toLocaleString('default', { month: 'short' });
+            
+            if (!acc[month]) {
+              acc[month] = { name: month, instagram: 0, twitter: 0 };
+            }
+            
+            if (item.platform === 'instagram') {
+              acc[month].instagram += (item.total_likes + item.total_comments + item.total_shares);
+            } else if (item.platform === 'twitter') {
+              acc[month].twitter += (item.total_likes + item.total_comments + item.total_shares);
+            }
+            
+            return acc;
+          }, {} as Record<string, any>);
+          
+          setPlatformData(Object.values(monthlyData));
+        } else {
+          // Use sample data if no real data
+          const samplePlatformData = [
+            { name: "Jan", instagram: 400, twitter: 240 },
+            { name: "Feb", instagram: 300, twitter: 139 },
+            { name: "Mar", instagram: 200, twitter: 980 },
+            { name: "Apr", instagram: 278, twitter: 390 },
+            { name: "May", instagram: 189, twitter: 480 },
+            { name: "Jun", instagram: 239, twitter: 380 },
+            { name: "Jul", instagram: 349, twitter: 430 },
+          ];
+          setPlatformData(samplePlatformData);
+        }
+        
+        // Fetch daily engagement data
+        const { data: dailyData, error: dailyError } = await supabase
+          .from('daily_engagement')
+          .select('*')
+          .order('day_of_week', { ascending: true });
+          
+        if (dailyError) throw dailyError;
+        
+        // Generate real engagement data for charts if available
+        if (dailyData && dailyData.length > 0) {
+          // Group by day of week
+          const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+          
+          // Initialize with 0 values
+          const dailyEngagement = days.map(day => ({
+            name: day,
+            likes: 0,
+            comments: 0,
+            shares: 0
+          }));
+          
+          // Sum engagement by day
+          dailyData.forEach(item => {
+            const dayIndex = days.indexOf(item.day_of_week);
+            if (dayIndex !== -1) {
+              // Distribute the engagement count across likes, comments, shares
+              // This is just approximate since we don't have detailed breakdown
+              dailyEngagement[dayIndex].likes += Math.floor(item.engagement_count * 0.6);
+              dailyEngagement[dayIndex].comments += Math.floor(item.engagement_count * 0.2);
+              dailyEngagement[dayIndex].shares += Math.floor(item.engagement_count * 0.2);
+            }
+          });
+          
+          setEngagementData(dailyEngagement);
+        } else {
+          // Use sample data if no real data
+          const sampleEngagementData = [
+            { name: "Mon", likes: 140, comments: 24, shares: 18 },
+            { name: "Tue", likes: 120, comments: 18, shares: 22 },
+            { name: "Wed", likes: 180, comments: 36, shares: 31 },
+            { name: "Thu", likes: 250, comments: 40, shares: 43 },
+            { name: "Fri", likes: 190, comments: 28, shares: 34 },
+            { name: "Sat", likes: 230, comments: 32, shares: 39 },
+            { name: "Sun", likes: 210, comments: 26, shares: 37 },
+          ];
+          setEngagementData(sampleEngagementData);
+        }
       } catch (err) {
         console.error('Error fetching posts with analytics:', err);
         setError(err instanceof Error ? err : new Error('Unknown error occurred'));
         // Use sample data in case of error
         setPosts(samplePosts);
         setUsingSampleData(true);
+        
+        // Set sample chart data
+        setPlatformData([
+          { name: "Jan", instagram: 400, twitter: 240 },
+          { name: "Feb", instagram: 300, twitter: 139 },
+          { name: "Mar", instagram: 200, twitter: 980 },
+          { name: "Apr", instagram: 278, twitter: 390 },
+          { name: "May", instagram: 189, twitter: 480 },
+          { name: "Jun", instagram: 239, twitter: 380 },
+          { name: "Jul", instagram: 349, twitter: 430 },
+        ]);
+        
+        setEngagementData([
+          { name: "Mon", likes: 140, comments: 24, shares: 18 },
+          { name: "Tue", likes: 120, comments: 18, shares: 22 },
+          { name: "Wed", likes: 180, comments: 36, shares: 31 },
+          { name: "Thu", likes: 250, comments: 40, shares: 43 },
+          { name: "Fri", likes: 190, comments: 28, shares: 34 },
+          { name: "Sat", likes: 230, comments: 32, shares: 39 },
+          { name: "Sun", likes: 210, comments: 26, shares: 37 },
+        ]);
       } finally {
         setLoading(false);
       }
@@ -148,7 +287,7 @@ export const usePostAnalytics = () => {
       }, (payload) => {
         // Handle metrics update
         console.log('Metrics updated:', payload);
-        // You could refresh the data or update the specific post's metrics
+        // Refresh the data
         fetchPostsWithAnalytics();
       })
       .subscribe();
@@ -158,5 +297,12 @@ export const usePostAnalytics = () => {
     };
   }, []);
   
-  return { posts, loading, error, usingSampleData };
+  return { 
+    posts, 
+    loading, 
+    error, 
+    usingSampleData, 
+    platformData, 
+    engagementData 
+  };
 };
