@@ -1,5 +1,4 @@
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { BarChart, Calendar, TrendingUp, Users, Activity, FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,6 +9,9 @@ import { usePostAnalytics } from "@/hooks/usePostAnalytics";
 import { useActivityHistory } from "@/hooks/useActivityHistory";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { Content } from "@/types";
+import { Link } from "react-router-dom";
 
 const data = [
   { name: "Jan", instagram: 400, twitter: 240 },
@@ -52,8 +54,85 @@ const Analytics: React.FC = () => {
   const { activities, loading: activitiesLoading } = useActivityHistory();
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
+  const [topContent, setTopContent] = useState<Content[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const selectedPost = selectedPostId ? posts.find(post => post.id === selectedPostId) : null;
+
+  useEffect(() => {
+    const fetchTopContent = async () => {
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('content')
+          .select(`
+            *,
+            content_metrics(*)
+          `)
+          .eq('status', 'published')
+          .order('published_at', { ascending: false })
+          .limit(3);
+          
+        if (error) {
+          throw error;
+        }
+        
+        if (data && data.length > 0) {
+          const transformedData: Content[] = data.map(item => ({
+            id: item.id,
+            type: item.type,
+            intent: item.intent,
+            platform: item.platform,
+            content: item.content,
+            mediaUrl: item.media_url,
+            status: item.status,
+            createdAt: new Date(item.created_at),
+            scheduledFor: item.scheduled_for ? new Date(item.scheduled_for) : undefined,
+            publishedAt: item.published_at ? new Date(item.published_at) : undefined,
+            metrics: item.content_metrics && item.content_metrics.length > 0 
+              ? {
+                  likes: item.content_metrics[0].likes,
+                  comments: item.content_metrics[0].comments,
+                  shares: item.content_metrics[0].shares,
+                  views: item.content_metrics[0].views,
+                }
+              : { likes: 0, comments: 0, shares: 0, views: 0 }
+          }));
+          
+          transformedData.sort((a, b) => {
+            const aEngagement = (a.metrics?.likes || 0) + (a.metrics?.comments || 0) + (a.metrics?.shares || 0);
+            const bEngagement = (b.metrics?.likes || 0) + (b.metrics?.comments || 0) + (b.metrics?.shares || 0);
+            return bEngagement - aEngagement;
+          });
+          
+          setTopContent(transformedData);
+        } else {
+          setTopContent([]);
+        }
+      } catch (error) {
+        console.error("Error fetching top content:", error);
+        setTopContent([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchTopContent();
+    
+    const channel = supabase
+      .channel('content_metrics_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'content_metrics' }, 
+        () => {
+          fetchTopContent();
+        }
+      )
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   return (
     <div className="container-page animate-fade-in">
@@ -210,19 +289,48 @@ const Analytics: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="flex items-center space-x-4 p-3 rounded-lg hover:bg-muted/50 transition-colors">
-                  <div className="w-12 h-12 bg-muted rounded-md flex items-center justify-center">
-                    <BarChart className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <div className="font-medium">Summer collection promotion #{i}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {4200 - i * 340} impressions • {320 - i * 30} engagements
+              {isLoading ? (
+                <div className="py-4 text-center text-muted-foreground">Loading top content...</div>
+              ) : topContent.length === 0 ? (
+                <div className="py-4 text-center text-muted-foreground">No published content found</div>
+              ) : (
+                topContent.map((content, index) => (
+                  <div 
+                    key={content.id} 
+                    className="flex items-center space-x-4 p-3 rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="w-12 h-12 bg-muted rounded-md flex items-center justify-center">
+                      {content.mediaUrl ? (
+                        <img 
+                          src={content.mediaUrl} 
+                          alt={`Content ${index + 1}`} 
+                          className="w-full h-full object-cover rounded-md" 
+                        />
+                      ) : (
+                        <BarChart className="h-6 w-6 text-primary" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium line-clamp-1">{content.content.substring(0, 60)}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {content.metrics?.views || 0} impressions • {(content.metrics?.likes || 0) + (content.metrics?.comments || 0)} engagements
+                      </div>
+                    </div>
+                    <div className={`px-2 py-1 text-xs rounded-full ${
+                      content.platform === 'instagram' ? 'bg-pink-100 text-pink-800' : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      {content.platform}
                     </div>
                   </div>
+                ))
+              )}
+              {topContent.length > 0 && (
+                <div className="pt-2">
+                  <Button variant="ghost" asChild className="w-full text-sm">
+                    <Link to="/pending-content?status=published">View all published content</Link>
+                  </Button>
                 </div>
-              ))}
+              )}
             </div>
           </CardContent>
         </Card>
