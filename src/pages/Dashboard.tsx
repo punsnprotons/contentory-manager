@@ -192,9 +192,21 @@ const Dashboard: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {topPerformingContent.slice(0, 2).map((content) => (
-            <ContentCard key={content.id} content={content} />
-          ))}
+          {topPerformingContent.length > 0 ? (
+            // Render actual content cards when we have top performing content
+            topPerformingContent.slice(0, 2).map((content) => (
+              <ContentCard key={content.id} content={content} />
+            ))
+          ) : (
+            // Render this when no top performing content is available
+            <div className="lg:col-span-2 flex flex-col items-center justify-center p-6 border rounded-lg border-dashed">
+              <Users size={40} className="text-muted-foreground mb-3" />
+              <h3 className="text-lg font-medium mb-1">No Content Yet</h3>
+              <p className="text-center text-muted-foreground text-sm mb-4">
+                You don't have any published content to analyze
+              </p>
+            </div>
+          )}
           <Card className="flex flex-col items-center justify-center p-6 border-dashed border-2 hover:border-primary/50 transition-colors">
             <Button variant="outline" className="rounded-full h-12 w-12 mb-3">
               <Plus size={20} />

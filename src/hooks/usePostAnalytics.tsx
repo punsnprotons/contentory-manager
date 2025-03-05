@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Content } from '@/types';
 
-// Sample data to use when no real data is available
+// Sample data to use when explicitly requested
 const samplePosts: Content[] = [
   {
     id: "sample-1",
@@ -113,49 +113,52 @@ export const usePostAnalytics = () => {
         const currentMonth = new Date().getMonth();
         let publishedPostsThisMonth = 0;
         
-        // If no posts found, use sample data
+        // If no posts found, initialize with empty arrays and defaults
         if (!postsData || postsData.length === 0) {
-          console.log("No published posts found, using sample data");
-          setPosts(samplePosts);
-          setUsingSampleData(true);
+          console.log("No published posts found, using empty data");
+          setPosts([]);
+          setUsingSampleData(false);
           
-          // Generate sample platform data for charts
-          const samplePlatformData = [
-            { name: "Jan", instagram: 400, twitter: 240 },
-            { name: "Feb", instagram: 300, twitter: 139 },
-            { name: "Mar", instagram: 200, twitter: 980 },
-            { name: "Apr", instagram: 278, twitter: 390 },
-            { name: "May", instagram: 189, twitter: 480 },
-            { name: "Jun", instagram: 239, twitter: 380 },
-            { name: "Jul", instagram: 349, twitter: 430 },
+          // Generate empty platform data for charts
+          const emptyPlatformData = [
+            { name: "Jan", instagram: 0, twitter: 0 },
+            { name: "Feb", instagram: 0, twitter: 0 },
+            { name: "Mar", instagram: 0, twitter: 0 },
+            { name: "Apr", instagram: 0, twitter: 0 },
+            { name: "May", instagram: 0, twitter: 0 },
+            { name: "Jun", instagram: 0, twitter: 0 },
+            { name: "Jul", instagram: 0, twitter: 0 },
           ];
           
-          // Generate sample engagement data for charts
-          const sampleEngagementData = [
-            { name: "Mon", likes: 140, comments: 24, shares: 18 },
-            { name: "Tue", likes: 120, comments: 18, shares: 22 },
-            { name: "Wed", likes: 180, comments: 36, shares: 31 },
-            { name: "Thu", likes: 250, comments: 40, shares: 43 },
-            { name: "Fri", likes: 190, comments: 28, shares: 34 },
-            { name: "Sat", likes: 230, comments: 32, shares: 39 },
-            { name: "Sun", likes: 210, comments: 26, shares: 37 },
+          // Generate empty engagement data for charts
+          const emptyEngagementData = [
+            { name: "Mon", likes: 0, comments: 0, shares: 0 },
+            { name: "Tue", likes: 0, comments: 0, shares: 0 },
+            { name: "Wed", likes: 0, comments: 0, shares: 0 },
+            { name: "Thu", likes: 0, comments: 0, shares: 0 },
+            { name: "Fri", likes: 0, comments: 0, shares: 0 },
+            { name: "Sat", likes: 0, comments: 0, shares: 0 },
+            { name: "Sun", likes: 0, comments: 0, shares: 0 },
           ];
           
-          setPlatformData(samplePlatformData);
-          setEngagementData(sampleEngagementData);
+          setPlatformData(emptyPlatformData);
+          setEngagementData(emptyEngagementData);
           
-          // Sample data for posts this month
-          publishedPostsThisMonth = samplePosts.filter(post => 
-            post.publishedAt && post.publishedAt.getMonth() === currentMonth
-          ).length;
+          // Empty data for posts this month
+          setPostsThisMonth(0);
           
-          setPostsThisMonth(publishedPostsThisMonth);
+          // Empty data for average reach
+          setAvgReach(0);
           
-          // Sample data for average reach
-          const sampleTotalReach = samplePosts.reduce((sum, post) => sum + (post.metrics?.views || 0), 0);
-          setAvgReach(samplePosts.length > 0 ? Math.floor(sampleTotalReach / samplePosts.length) : 0);
+          // Empty top performing content
+          setTopPerformingContent([]);
           
-          setTopPerformingContent(samplePosts);
+          // Set default platform distribution
+          setPlatformDistribution({
+            instagram: 50,
+            twitter: 50
+          });
+          
           setLoading(false);
           return;
         }
@@ -409,33 +412,34 @@ export const usePostAnalytics = () => {
       } catch (err) {
         console.error('Error fetching posts with analytics:', err);
         setError(err instanceof Error ? err : new Error('Unknown error occurred'));
-        // Use sample data in case of error
-        setPosts(samplePosts);
-        setUsingSampleData(true);
         
-        // Set sample chart data
+        // Use empty data in case of error
+        setPosts([]);
+        setUsingSampleData(false);
+        
+        // Set empty chart data
         setPlatformData([
-          { name: "Jan", instagram: 400, twitter: 240 },
-          { name: "Feb", instagram: 300, twitter: 139 },
-          { name: "Mar", instagram: 200, twitter: 980 },
-          { name: "Apr", instagram: 278, twitter: 390 },
-          { name: "May", instagram: 189, twitter: 480 },
-          { name: "Jun", instagram: 239, twitter: 380 },
-          { name: "Jul", instagram: 349, twitter: 430 },
+          { name: "Jan", instagram: 0, twitter: 0 },
+          { name: "Feb", instagram: 0, twitter: 0 },
+          { name: "Mar", instagram: 0, twitter: 0 },
+          { name: "Apr", instagram: 0, twitter: 0 },
+          { name: "May", instagram: 0, twitter: 0 },
+          { name: "Jun", instagram: 0, twitter: 0 },
+          { name: "Jul", instagram: 0, twitter: 0 },
         ]);
         
         setEngagementData([
-          { name: "Mon", likes: 140, comments: 24, shares: 18 },
-          { name: "Tue", likes: 120, comments: 18, shares: 22 },
-          { name: "Wed", likes: 180, comments: 36, shares: 31 },
-          { name: "Thu", likes: 250, comments: 40, shares: 43 },
-          { name: "Fri", likes: 190, comments: 28, shares: 34 },
-          { name: "Sat", likes: 230, comments: 32, shares: 39 },
-          { name: "Sun", likes: 210, comments: 26, shares: 37 },
+          { name: "Mon", likes: 0, comments: 0, shares: 0 },
+          { name: "Tue", likes: 0, comments: 0, shares: 0 },
+          { name: "Wed", likes: 0, comments: 0, shares: 0 },
+          { name: "Thu", likes: 0, comments: 0, shares: 0 },
+          { name: "Fri", likes: 0, comments: 0, shares: 0 },
+          { name: "Sat", likes: 0, comments: 0, shares: 0 },
+          { name: "Sun", likes: 0, comments: 0, shares: 0 },
         ]);
         
-        // Sample data for top performing content
-        setTopPerformingContent(samplePosts);
+        // Empty data for top performing content
+        setTopPerformingContent([]);
       } finally {
         setLoading(false);
       }
