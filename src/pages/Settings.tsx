@@ -1,4 +1,3 @@
-
 import React from "react";
 import { Bell, FileText, Globe, Lock, Mail, User, X, Check, Plus } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,58 +45,31 @@ const Settings: React.FC = () => {
         </TabsList>
 
         <TabsContent value="account">
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Personal Information</CardTitle>
-                <CardDescription>
-                  Update your account information and profile details.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input id="name" defaultValue="Jane Smith" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input id="email" type="email" defaultValue="jane@example.com" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="company">Company</Label>
-                  <Input id="company" defaultValue="Acme Inc." />
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Button>Update Profile</Button>
-              </CardFooter>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Subscription Plan</CardTitle>
-                <CardDescription>
-                  You are currently on the Professional plan.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="bg-primary/10 p-4 rounded-lg border border-primary/20">
-                  <div className="text-lg font-medium">Professional Plan</div>
-                  <div className="text-sm text-muted-foreground">$29.99/month</div>
-                  <div className="flex items-center gap-1 mt-2 text-sm">
-                    <Check className="text-green-500 h-4 w-4" /> Unlimited posts
-                  </div>
-                  <div className="flex items-center gap-1 mt-1 text-sm">
-                    <Check className="text-green-500 h-4 w-4" /> Advanced analytics
-                  </div>
-                  <div className="flex items-center gap-1 mt-1 text-sm">
-                    <Check className="text-green-500 h-4 w-4" /> Priority support
-                  </div>
-                </div>
-                <Button variant="outline" className="w-full">Upgrade Plan</Button>
-              </CardContent>
-            </Card>
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Personal Information</CardTitle>
+              <CardDescription>
+                Update your account information and profile details.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Full Name</Label>
+                <Input id="name" defaultValue="Jane Smith" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email Address</Label>
+                <Input id="email" type="email" defaultValue="jane@example.com" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="company">Company</Label>
+                <Input id="company" defaultValue="Acme Inc." />
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button>Update Profile</Button>
+            </CardFooter>
+          </Card>
         </TabsContent>
 
         <TabsContent value="notifications">
