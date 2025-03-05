@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { BarChart, Calendar, TrendingUp, Users, Activity } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,21 +43,18 @@ const Analytics: React.FC = () => {
     refreshData
   } = usePostAnalytics();
   
-  const { 
-    activities, 
-    loading: activitiesLoading, 
-    comments 
-  } = useActivityHistory();
-  
+  const { activities, loading: activitiesLoading } = useActivityHistory();
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
 
   const selectedPost = selectedPostId ? posts.find(post => post.id === selectedPostId) : null;
 
+  // Format numbers with commas
   const formatNumber = (num: number) => {
     return num.toLocaleString();
   };
   
+  // Count posts by platform
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
   
@@ -74,6 +72,7 @@ const Analytics: React.FC = () => {
     post.platform === 'twitter'
   ).length;
 
+  // Force a refresh of data when component mounts
   useEffect(() => {
     console.log("Analytics page mounted, refreshing data");
     refreshData();
@@ -116,6 +115,7 @@ const Analytics: React.FC = () => {
         />
       </div>
 
+      {/* Platform-specific metrics */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -267,7 +267,7 @@ const Analytics: React.FC = () => {
               ) : activities.length === 0 ? (
                 <div className="py-6 text-center text-muted-foreground">No activity found</div>
               ) : (
-                <ActivityHistory activities={activities} comments={comments} />
+                <ActivityHistory activities={activities} />
               )}
             </TabsContent>
           </CardContent>

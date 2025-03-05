@@ -14,7 +14,7 @@ interface ActivityItem {
   contentImage?: string;
 }
 
-// Sample activity data to use when no real data is available or in development
+// Sample activity data to use when no real data is available
 const sampleActivities: ActivityItem[] = [
   {
     id: "sample-activity-1",
@@ -67,7 +67,6 @@ export const useActivityHistory = () => {
   const [error, setError] = useState<Error | null>(null);
   const [contentMap, setContentMap] = useState<Record<string, Content>>({});
   const [usingSampleData, setUsingSampleData] = useState(false);
-  const [comments, setComments] = useState<Record<string, any[]>>({});
 
   useEffect(() => {
     const fetchActivityHistory = async () => {
@@ -88,7 +87,6 @@ export const useActivityHistory = () => {
           console.log("No activity history found, using sample data");
           setActivities(sampleActivities);
           setContentMap({});
-          setComments({});
           setUsingSampleData(true);
           setLoading(false);
           return;
@@ -101,10 +99,8 @@ export const useActivityHistory = () => {
         
         // If there are content IDs, fetch the related content
         let contentItems: Record<string, Content> = {};
-        let commentsMap: Record<string, any[]> = {};
         
         if (contentIds.length > 0) {
-          // Fetch content items
           const { data: contentData, error: contentError } = await supabase
             .from('content')
             .select('*')
@@ -128,36 +124,9 @@ export const useActivityHistory = () => {
             };
             return acc;
           }, {} as Record<string, Content>);
-          
-          // Fetch comments for all content
-          const { data: commentsData, error: commentsError } = await supabase
-            .from('content_comments')
-            .select('*')
-            .in('content_id', contentIds)
-            .order('created_at', { ascending: false });
-          
-          if (commentsError) throw commentsError;
-          
-          // Group comments by content ID
-          if (commentsData && commentsData.length > 0) {
-            commentsMap = commentsData.reduce((acc, comment) => {
-              if (!acc[comment.content_id]) {
-                acc[comment.content_id] = [];
-              }
-              acc[comment.content_id].push({
-                id: comment.id,
-                comment: comment.comment,
-                userName: comment.user_name,
-                userAvatar: comment.user_avatar,
-                createdAt: new Date(comment.created_at)
-              });
-              return acc;
-            }, {} as Record<string, any[]>);
-          }
         }
         
         setContentMap(contentItems);
-        setComments(commentsMap);
         
         // Transform activity data
         const transformedActivities: ActivityItem[] = activityData.map(activity => {
@@ -183,7 +152,6 @@ export const useActivityHistory = () => {
         // Use sample data in case of error
         setActivities(sampleActivities);
         setContentMap({});
-        setComments({});
         setUsingSampleData(true);
       } finally {
         setLoading(false);
@@ -193,47 +161,24 @@ export const useActivityHistory = () => {
     fetchActivityHistory();
     
     // Set up realtime subscription for new activities
-    const activityChannel = supabase
-      .channel('activity_changes')
+    const channel = supabase
+      .channel('public:activity_history')
       .on('postgres_changes', { 
         event: 'INSERT', 
         schema: 'public', 
         table: 'activity_history' 
       }, (payload) => {
+        // Handle new activity
         console.log('New activity:', payload);
-        fetchActivityHistory();
-      })
-      .subscribe();
-    
-    // Set up realtime subscription for new comments
-    const commentChannel = supabase
-      .channel('comment_changes')
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'content_comments' 
-      }, (payload) => {
-        console.log('New comment:', payload);
+        // You could refresh the data or append the new activity
         fetchActivityHistory();
       })
       .subscribe();
     
     return () => {
-      supabase.removeChannel(activityChannel);
-      supabase.removeChannel(commentChannel);
+      supabase.removeChannel(channel);
     };
   }, []);
   
-  return { 
-    activities, 
-    loading, 
-    error, 
-    contentMap, 
-    comments,
-    usingSampleData,
-    refreshData: () => {
-      setLoading(true);
-      // This will trigger the useEffect to run again
-    }
-  };
+  return { activities, loading, error, contentMap, usingSampleData };
 };

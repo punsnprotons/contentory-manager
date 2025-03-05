@@ -1,3 +1,4 @@
+
 import React, { useEffect } from "react";
 import {
   BarChart as BarChartIcon,
@@ -7,8 +8,7 @@ import {
   Eye,
   ArrowRight,
   Zap,
-  Users,
-  Activity
+  Users
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,10 +18,9 @@ import { Metric } from "@/types";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { Link } from "react-router-dom";
 import { usePostAnalytics } from "@/hooks/usePostAnalytics";
-import { useActivityHistory } from "@/hooks/useActivityHistory";
-import ActivityHistory from "@/components/analytics/ActivityHistory";
 
 const Dashboard: React.FC = () => {
+  // Use the expanded hook to get analytics data
   const { 
     topPerformingContent, 
     loading, 
@@ -36,20 +35,17 @@ const Dashboard: React.FC = () => {
     posts
   } = usePostAnalytics();
 
-  const { 
-    activities, 
-    loading: activitiesLoading, 
-    comments
-  } = useActivityHistory();
-
+  // Force a refresh of data when component mounts to ensure we have the latest data
   useEffect(() => {
     console.log("Dashboard mounted, refreshing data");
     refreshData();
-  }, [refreshData]);
+  }, []);
 
+  // Count posts this month by platform
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
   
+  // Count Instagram posts this month
   const instagramPostsThisMonth = posts.filter(post => 
     post.publishedAt && 
     post.publishedAt.getMonth() === currentMonth &&
@@ -57,6 +53,7 @@ const Dashboard: React.FC = () => {
     post.platform === 'instagram'
   ).length;
   
+  // Count Twitter posts this month
   const twitterPostsThisMonth = posts.filter(post => 
     post.publishedAt && 
     post.publishedAt.getMonth() === currentMonth &&
@@ -66,6 +63,7 @@ const Dashboard: React.FC = () => {
   
   console.log(`Dashboard client-side count: Instagram: ${instagramPostsThisMonth}, Twitter: ${twitterPostsThisMonth}`);
 
+  // Create metrics from real data
   const metrics: Metric[] = [
     {
       id: "1",
@@ -184,6 +182,7 @@ const Dashboard: React.FC = () => {
               </div>
 
               <div className="pt-4 space-y-2">
+                {/* Aggregate data from top performing content */}
                 <div className="flex items-center text-sm">
                   <Heart size={16} className="mr-2 text-red-500" />
                   <span className="font-medium">
@@ -226,77 +225,51 @@ const Dashboard: React.FC = () => {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        <div className="lg:col-span-2">
-          <div className="mb-6 flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Top Performing Content</h2>
-            <Button variant="ghost" asChild className="flex items-center text-muted-foreground">
-              <Link to="/pending-content?status=published">
-                <span>View All</span>
-                <ArrowRight size={16} className="ml-1" />
-              </Link>
-            </Button>
-          </div>
-
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-muted h-56 rounded-lg animate-pulse"></div>
-              <div className="bg-muted h-56 rounded-lg animate-pulse"></div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {topPerformingContent && topPerformingContent.length > 0 ? (
-                topPerformingContent.slice(0, 2).map((content) => (
-                  <ContentCard key={content.id} content={content} />
-                ))
-              ) : (
-                <div className="col-span-2 flex flex-col items-center justify-center p-6 border rounded-lg border-dashed">
-                  <Users size={40} className="text-muted-foreground mb-3" />
-                  <h3 className="text-lg font-medium mb-1">No Content Yet</h3>
-                  <p className="text-center text-muted-foreground text-sm mb-4">
-                    You don't have any published content to analyze
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div>
-          <h2 className="text-xl font-semibold mb-6">Recent Activity</h2>
-          {activitiesLoading ? (
-            <div className="bg-muted h-56 rounded-lg animate-pulse"></div>
-          ) : (
-            activities && activities.length > 0 ? (
-              <div className="max-h-[400px] overflow-y-auto pr-2">
-                <ActivityHistory 
-                  activities={activities.slice(0, 5)} 
-                  comments={comments} 
-                />
-              </div>
-            ) : (
-              <Card className="flex flex-col items-center justify-center p-6 border-dashed border-2">
-                <Activity size={40} className="text-muted-foreground mb-3" />
-                <h3 className="text-lg font-medium mb-1">No Recent Activity</h3>
-                <p className="text-center text-muted-foreground text-sm mb-4">
-                  There's no recent activity to display
-                </p>
-              </Card>
-            )
-          )}
-        </div>
+      <div className="mb-6 flex items-center justify-between">
+        <h2 className="text-xl font-semibold">Top Performing Content</h2>
+        <Button variant="ghost" asChild className="flex items-center text-muted-foreground">
+          <Link to="/pending-content?status=published">
+            <span>View All</span>
+            <ArrowRight size={16} className="ml-1" />
+          </Link>
+        </Button>
       </div>
 
-      <Card className="flex flex-col items-center justify-center p-6 border-dashed border-2 hover:border-primary/50 transition-colors">
-        <Button variant="outline" className="rounded-full h-12 w-12 mb-3">
-          <Plus size={20} />
-        </Button>
-        <h3 className="text-lg font-medium mb-1">Create New Content</h3>
-        <p className="text-center text-muted-foreground text-sm mb-4">Generate new content for your social media platforms</p>
-        <Button asChild>
-          <Link to="/content-generation">Get Started</Link>
-        </Button>
-      </Card>
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="bg-muted h-56 rounded-lg animate-pulse"></div>
+          <div className="bg-muted h-56 rounded-lg animate-pulse"></div>
+          <div className="bg-muted h-56 rounded-lg animate-pulse"></div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {topPerformingContent && topPerformingContent.length > 0 ? (
+            // Only render the first two items from topPerformingContent
+            topPerformingContent.slice(0, 2).map((content) => (
+              <ContentCard key={content.id} content={content} />
+            ))
+          ) : (
+            // Render this when no top performing content is available
+            <div className="lg:col-span-2 flex flex-col items-center justify-center p-6 border rounded-lg border-dashed">
+              <Users size={40} className="text-muted-foreground mb-3" />
+              <h3 className="text-lg font-medium mb-1">No Content Yet</h3>
+              <p className="text-center text-muted-foreground text-sm mb-4">
+                You don't have any published content to analyze
+              </p>
+            </div>
+          )}
+          <Card className="flex flex-col items-center justify-center p-6 border-dashed border-2 hover:border-primary/50 transition-colors">
+            <Button variant="outline" className="rounded-full h-12 w-12 mb-3">
+              <Plus size={20} />
+            </Button>
+            <h3 className="text-lg font-medium mb-1">Create New Content</h3>
+            <p className="text-center text-muted-foreground text-sm mb-4">Generate new content for your social media platforms</p>
+            <Button asChild>
+              <Link to="/content-generation">Get Started</Link>
+            </Button>
+          </Card>
+        </div>
+      )}
     </div>
   );
 };
