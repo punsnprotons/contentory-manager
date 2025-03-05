@@ -509,6 +509,48 @@ export type Database = {
           },
         ]
       }
+      platform_statistics: {
+        Row: {
+          avg_reach_per_post: number
+          created_at: string
+          engagement_rate: number
+          id: string
+          period_end: string
+          period_start: string
+          platform: Database["public"]["Enums"]["social_platform"]
+          post_count: number
+          total_followers: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avg_reach_per_post?: number
+          created_at?: string
+          engagement_rate?: number
+          id?: string
+          period_end: string
+          period_start: string
+          platform: Database["public"]["Enums"]["social_platform"]
+          post_count?: number
+          total_followers?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avg_reach_per_post?: number
+          created_at?: string
+          engagement_rate?: number
+          id?: string
+          period_end?: string
+          period_start?: string
+          platform?: Database["public"]["Enums"]["social_platform"]
+          post_count?: number
+          total_followers?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_settings: {
         Row: {
           created_at: string

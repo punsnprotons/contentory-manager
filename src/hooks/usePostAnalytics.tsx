@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Content } from '@/types';
@@ -79,20 +78,29 @@ export const usePostAnalytics = () => {
   });
   const [topPerformingContent, setTopPerformingContent] = useState<Content[]>([]);
   const [followerMetrics, setFollowerMetrics] = useState({
-    instagram: { count: 10800, change: "+12.3%" },
-    twitter: { count: 8400, change: "+8.7%" }
+    instagram: { count: 0, change: "0.0%" },
+    twitter: { count: 0, change: "0.0%" }
   });
   const [engagementRate, setEngagementRate] = useState({
-    value: "4.6%",
-    change: "+2.1%",
+    value: "0.0%",
+    change: "0.0%",
     trend: "up" as "up" | "down"
   });
   const [postsThisMonth, setPostsThisMonth] = useState(0);
   const [avgReach, setAvgReach] = useState(0);
   const [platformDistribution, setPlatformDistribution] = useState({
-    instagram: 65,
-    twitter: 35
+    instagram: 50,
+    twitter: 50
   });
+
+  const getPreviousPeriodDateRange = (currentStart: Date, currentEnd: Date) => {
+    const diffDays = Math.ceil((currentEnd.getTime() - currentStart.getTime()) / (1000 * 60 * 60 * 24));
+    const prevEnd = new Date(currentStart);
+    prevEnd.setDate(prevEnd.getDate() - 1);
+    const prevStart = new Date(prevEnd);
+    prevStart.setDate(prevStart.getDate() - diffDays);
+    return { prevStart, prevEnd };
+  };
 
   useEffect(() => {
     const fetchPostsWithAnalytics = async () => {
@@ -160,6 +168,10 @@ export const usePostAnalytics = () => {
           });
           
           setLoading(false);
+          
+          // Fetch platform statistics data even if there are no posts
+          await fetchAndSetPlatformStatistics();
+          
           return;
         }
         
@@ -271,17 +283,17 @@ export const usePostAnalytics = () => {
             });
           }
         } else {
-          // Use sample data if no real data
-          const samplePlatformData = [
-            { name: "Jan", instagram: 400, twitter: 240 },
-            { name: "Feb", instagram: 300, twitter: 139 },
-            { name: "Mar", instagram: 200, twitter: 980 },
-            { name: "Apr", instagram: 278, twitter: 390 },
-            { name: "May", instagram: 189, twitter: 480 },
-            { name: "Jun", instagram: 239, twitter: 380 },
-            { name: "Jul", instagram: 349, twitter: 430 },
+          // Use empty data if no real data
+          const emptyPlatformData = [
+            { name: "Jan", instagram: 0, twitter: 0 },
+            { name: "Feb", instagram: 0, twitter: 0 },
+            { name: "Mar", instagram: 0, twitter: 0 },
+            { name: "Apr", instagram: 0, twitter: 0 },
+            { name: "May", instagram: 0, twitter: 0 },
+            { name: "Jun", instagram: 0, twitter: 0 },
+            { name: "Jul", instagram: 0, twitter: 0 },
           ];
-          setPlatformData(samplePlatformData);
+          setPlatformData(emptyPlatformData);
         }
         
         // Fetch daily engagement data
@@ -319,96 +331,22 @@ export const usePostAnalytics = () => {
           
           setEngagementData(dailyEngagement);
         } else {
-          // Use sample data if no real data
-          const sampleEngagementData = [
-            { name: "Mon", likes: 140, comments: 24, shares: 18 },
-            { name: "Tue", likes: 120, comments: 18, shares: 22 },
-            { name: "Wed", likes: 180, comments: 36, shares: 31 },
-            { name: "Thu", likes: 250, comments: 40, shares: 43 },
-            { name: "Fri", likes: 190, comments: 28, shares: 34 },
-            { name: "Sat", likes: 230, comments: 32, shares: 39 },
-            { name: "Sun", likes: 210, comments: 26, shares: 37 },
+          // Use empty data if no real data
+          const emptyEngagementData = [
+            { name: "Mon", likes: 0, comments: 0, shares: 0 },
+            { name: "Tue", likes: 0, comments: 0, shares: 0 },
+            { name: "Wed", likes: 0, comments: 0, shares: 0 },
+            { name: "Thu", likes: 0, comments: 0, shares: 0 },
+            { name: "Fri", likes: 0, comments: 0, shares: 0 },
+            { name: "Sat", likes: 0, comments: 0, shares: 0 },
+            { name: "Sun", likes: 0, comments: 0, shares: 0 },
           ];
-          setEngagementData(sampleEngagementData);
+          setEngagementData(emptyEngagementData);
         }
         
-        // Fetch follower metrics
-        const { data: followerData, error: followerError } = await supabase
-          .from('follower_metrics')
-          .select('*')
-          .order('recorded_at', { ascending: false })
-          .limit(10);
-          
-        if (!followerError && followerData && followerData.length > 0) {
-          // Group by platform and calculate growth
-          const instagramFollowers = followerData.filter(item => item.platform === 'instagram');
-          const twitterFollowers = followerData.filter(item => item.platform === 'twitter');
-          
-          if (instagramFollowers.length >= 2) {
-            const current = instagramFollowers[0].follower_count;
-            const previous = instagramFollowers[1].follower_count;
-            const change = previous > 0 ? ((current - previous) / previous) * 100 : 0;
-            
-            setFollowerMetrics(prev => ({
-              ...prev,
-              instagram: {
-                count: current,
-                change: `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`
-              }
-            }));
-          }
-          
-          if (twitterFollowers.length >= 2) {
-            const current = twitterFollowers[0].follower_count;
-            const previous = twitterFollowers[1].follower_count;
-            const change = previous > 0 ? ((current - previous) / previous) * 100 : 0;
-            
-            setFollowerMetrics(prev => ({
-              ...prev,
-              twitter: {
-                count: current,
-                change: `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`
-              }
-            }));
-          }
-        }
+        // Fetch platform statistics even when we have posts
+        await fetchAndSetPlatformStatistics();
         
-        // Fetch engagement metrics
-        const { data: engagementMetricsData, error: engagementError } = await supabase
-          .from('engagement_metrics')
-          .select('*')
-          .order('recorded_at', { ascending: false })
-          .limit(10);
-          
-        if (!engagementError && engagementMetricsData && engagementMetricsData.length > 0) {
-          // Calculate average engagement rate
-          const totalEngagement = engagementMetricsData.reduce((sum, item) => sum + parseFloat(item.engagement_rate.toString()), 0);
-          const avgEngagement = totalEngagement / engagementMetricsData.length;
-          
-          // Calculate change if there are enough data points
-          if (engagementMetricsData.length >= 2) {
-            const recentAvg = engagementMetricsData.slice(0, 5).reduce((sum, item) => sum + parseFloat(item.engagement_rate.toString()), 0) / 5;
-            const olderAvg = engagementMetricsData.slice(5, 10).reduce((sum, item) => sum + parseFloat(item.engagement_rate.toString()), 0) / 5;
-            const change = olderAvg > 0 ? ((recentAvg - olderAvg) / olderAvg) * 100 : 0;
-            
-            setEngagementRate({
-              value: `${avgEngagement.toFixed(1)}%`,
-              change: `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`,
-              trend: change >= 0 ? "up" : "down"
-            });
-          } else {
-            setEngagementRate({
-              value: `${avgEngagement.toFixed(1)}%`,
-              change: "+0.0%",
-              trend: "up"
-            });
-          }
-        }
-        
-        // Fetch audience demographics data
-        // This would typically come from a dedicated table, but since we don't have one,
-        // we'll simulate it or use stored demographics if there is such a table
-        // For now, we'll keep the default values set in state
       } catch (err) {
         console.error('Error fetching posts with analytics:', err);
         setError(err instanceof Error ? err : new Error('Unknown error occurred'));
@@ -442,6 +380,128 @@ export const usePostAnalytics = () => {
         setTopPerformingContent([]);
       } finally {
         setLoading(false);
+      }
+    };
+    
+    const fetchAndSetPlatformStatistics = async () => {
+      try {
+        // Get current month date range
+        const today = new Date();
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        
+        // Get previous month date range
+        const { prevStart, prevEnd } = getPreviousPeriodDateRange(firstDay, lastDay);
+        
+        // Fetch current month statistics
+        const { data: currentStats, error: currentStatsError } = await supabase
+          .from('platform_statistics')
+          .select('*')
+          .gte('period_start', firstDay.toISOString().split('T')[0])
+          .lte('period_end', lastDay.toISOString().split('T')[0])
+          .order('created_at', { ascending: false });
+        
+        if (currentStatsError) throw currentStatsError;
+        
+        // Fetch previous month statistics
+        const { data: prevStats, error: prevStatsError } = await supabase
+          .from('platform_statistics')
+          .select('*')
+          .gte('period_start', prevStart.toISOString().split('T')[0])
+          .lte('period_end', prevEnd.toISOString().split('T')[0])
+          .order('created_at', { ascending: false });
+        
+        if (prevStatsError) throw prevStatsError;
+        
+        // Process follower metrics
+        const currentInstagramStats = currentStats?.find(stat => stat.platform === 'instagram');
+        const prevInstagramStats = prevStats?.find(stat => stat.platform === 'instagram');
+        const currentTwitterStats = currentStats?.find(stat => stat.platform === 'twitter');
+        const prevTwitterStats = prevStats?.find(stat => stat.platform === 'twitter');
+        
+        // Calculate Instagram follower change
+        const instagramFollowerCount = currentInstagramStats?.total_followers || 0;
+        let instagramFollowerChange = "0.0%";
+        if (prevInstagramStats && prevInstagramStats.total_followers > 0) {
+          const changePercent = ((instagramFollowerCount - prevInstagramStats.total_followers) / prevInstagramStats.total_followers) * 100;
+          instagramFollowerChange = `${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(1)}%`;
+        }
+        
+        // Calculate Twitter follower change
+        const twitterFollowerCount = currentTwitterStats?.total_followers || 0;
+        let twitterFollowerChange = "0.0%";
+        if (prevTwitterStats && prevTwitterStats.total_followers > 0) {
+          const changePercent = ((twitterFollowerCount - prevTwitterStats.total_followers) / prevTwitterStats.total_followers) * 100;
+          twitterFollowerChange = `${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(1)}%`;
+        }
+        
+        // Update follower metrics state
+        setFollowerMetrics({
+          instagram: { 
+            count: instagramFollowerCount, 
+            change: instagramFollowerChange 
+          },
+          twitter: { 
+            count: twitterFollowerCount, 
+            change: twitterFollowerChange 
+          }
+        });
+        
+        // Calculate average engagement rate and its change
+        const currentInstagramEngagement = currentInstagramStats?.engagement_rate || 0;
+        const currentTwitterEngagement = currentTwitterStats?.engagement_rate || 0;
+        const avgEngagementRate = (currentInstagramEngagement + currentTwitterEngagement) / 2;
+        
+        const prevInstagramEngagement = prevInstagramStats?.engagement_rate || 0;
+        const prevTwitterEngagement = prevTwitterStats?.engagement_rate || 0;
+        const prevAvgEngagementRate = (prevInstagramEngagement + prevTwitterEngagement) / 2;
+        
+        let engagementRateChange = "0.0%";
+        let engagementRateTrend: "up" | "down" = "up";
+        
+        if (prevAvgEngagementRate > 0) {
+          const changePercent = ((avgEngagementRate - prevAvgEngagementRate) / prevAvgEngagementRate) * 100;
+          engagementRateChange = `${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(1)}%`;
+          engagementRateTrend = changePercent >= 0 ? "up" : "down";
+        }
+        
+        // Update engagement rate state
+        setEngagementRate({
+          value: `${avgEngagementRate.toFixed(1)}%`,
+          change: engagementRateChange,
+          trend: engagementRateTrend
+        });
+        
+        // Calculate posts this month if we don't have that data yet from content
+        if (postsThisMonth === 0) {
+          const instagramPosts = currentInstagramStats?.post_count || 0;
+          const twitterPosts = currentTwitterStats?.post_count || 0;
+          const totalPosts = instagramPosts + twitterPosts;
+          
+          setPostsThisMonth(totalPosts);
+        }
+        
+        // Update average reach if we don't have that data yet
+        if (avgReach === 0) {
+          const instagramReach = currentInstagramStats?.avg_reach_per_post || 0;
+          const twitterReach = currentTwitterStats?.avg_reach_per_post || 0;
+          
+          // Only count platforms with posts
+          let platformsWithPosts = 0;
+          if (currentInstagramStats?.post_count && currentInstagramStats.post_count > 0) platformsWithPosts++;
+          if (currentTwitterStats?.post_count && currentTwitterStats.post_count > 0) platformsWithPosts++;
+          
+          const newAvgReach = platformsWithPosts > 0 
+            ? Math.floor((instagramReach + twitterReach) / platformsWithPosts) 
+            : 0;
+            
+          setAvgReach(newAvgReach);
+        }
+        
+      } catch (err) {
+        console.error('Error fetching platform statistics:', err);
+        // We don't need to reset all states here since this is supplementary data
+        // The main fetch function will handle setting defaults
       }
     };
     
@@ -495,14 +555,26 @@ export const usePostAnalytics = () => {
         fetchPostsWithAnalytics();
       })
       .subscribe();
+      
+    const platformStatsChannel = supabase
+      .channel('public:platform_statistics')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'platform_statistics' 
+      }, () => {
+        fetchPostsWithAnalytics();
+      })
+      .subscribe();
     
     return () => {
       supabase.removeChannel(metricsChannel);
       supabase.removeChannel(followersChannel);
       supabase.removeChannel(performanceChannel);
       supabase.removeChannel(dailyEngagementChannel);
+      supabase.removeChannel(platformStatsChannel);
     };
-  }, []);
+  }, [postsThisMonth, avgReach]);
   
   return { 
     posts, 

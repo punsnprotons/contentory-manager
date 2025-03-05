@@ -60,7 +60,9 @@ const Dashboard: React.FC = () => {
       id: "4",
       label: "Posts This Month",
       value: postsThisMonth,
-      change: postsThisMonth > 0 ? parseFloat(((postsThisMonth - (postsThisMonth / 1.1)) / (postsThisMonth / 1.1) * 100).toFixed(1)) : 0,
+      change: postsThisMonth > 0 ? 
+        parseFloat(((postsThisMonth - (postsThisMonth / 1.1)) / (postsThisMonth / 1.1) * 100).toFixed(1)) : 
+        0,
       platform: "twitter",
     },
   ];
