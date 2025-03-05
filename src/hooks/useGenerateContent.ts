@@ -51,11 +51,38 @@ export const useGenerateContent = () => {
     }
   };
 
+  const ensureUserExists = async (userId: string, email: string): Promise<void> => {
+    const { data: existingUser, error: fetchError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('auth_id', userId)
+      .maybeSingle();
+    
+    if (fetchError) {
+      console.error("Error checking for user:", fetchError);
+      throw fetchError;
+    }
+    
+    if (!existingUser) {
+      console.log("User not found in users table, creating entry for:", userId);
+      const { error: insertError } = await supabase
+        .from('users')
+        .insert({
+          auth_id: userId,
+          email: email
+        });
+      
+      if (insertError) {
+        console.error("Error creating user:", insertError);
+        throw insertError;
+      }
+    }
+  };
+
   const saveContent = async (params: SaveContentParams): Promise<string> => {
     setIsSaving(true);
     
     try {
-      // Get the current authenticated user
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
@@ -64,7 +91,19 @@ export const useGenerateContent = () => {
       
       console.log("Saving content with user ID:", user.id);
       
-      // Insert content into the database
+      await ensureUserExists(user.id, user.email || '');
+      
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_id', user.id)
+        .single();
+      
+      if (userError) {
+        console.error("Error fetching user ID:", userError);
+        throw userError;
+      }
+      
       const { data, error } = await supabase
         .from('content')
         .insert({
@@ -76,7 +115,7 @@ export const useGenerateContent = () => {
           status: params.status,
           scheduled_for: params.scheduledFor ? params.scheduledFor.toISOString() : null,
           published_at: params.status === 'published' ? new Date().toISOString() : null,
-          user_id: user.id
+          user_id: userData.id
         })
         .select()
         .single();
@@ -191,7 +230,6 @@ Content Intent: ${params.intent}
 
   const generateImageContent = async (params: GenerateContentParams): Promise<GeneratedContent> => {
     try {
-      // Generate prompt for DALL-E
       const imagePrompt = `Create a visual for a ${params.platform} post about Wubble (an AI-powered music creation platform) that focuses on ${params.intent}. ${params.prompt}`;
 
       const response = await fetch('https://api.openai.com/v1/images/generations', {
@@ -215,7 +253,6 @@ Content Intent: ${params.intent}
 
       const data = await response.json();
       
-      // Also generate a caption for the image
       const captionResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -256,7 +293,6 @@ Content Intent: ${params.intent}
 
   const generateVideoContent = async (params: GenerateContentParams): Promise<GeneratedContent> => {
     try {
-      // First generate a text description using GPT
       const descriptionResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -286,11 +322,8 @@ Content Intent: ${params.intent}
       const descriptionData = await descriptionResponse.json();
       const description = descriptionData.choices[0].message.content;
       
-      // For now, we'll use public sample video URLs based on content intent
-      // In a production app, you would call the Replicate API with proper authentication
       let videoUrl = "";
       
-      // Use different sample videos based on content intent for better demonstration
       switch(params.intent) {
         case 'promotional':
           videoUrl = "https://assets.mixkit.co/videos/preview/mixkit-small-waves-rushing-to-the-shore-2310-large.mp4";
