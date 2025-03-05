@@ -16,8 +16,13 @@ import MetricCard from "@/components/ui/MetricCard";
 import ContentCard from "@/components/ui/ContentCard";
 import { Metric, Content } from "@/types";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { Link } from "react-router-dom";
+import { usePostAnalytics } from "@/hooks/usePostAnalytics";
 
 const Dashboard: React.FC = () => {
+  // Use the hook to get published posts
+  const { posts: topPerformingContent, loading, usingSampleData } = usePostAnalytics();
+
   // Sample data - in a real app this would come from an API
   const metrics: Metric[] = [
     {
@@ -47,42 +52,6 @@ const Dashboard: React.FC = () => {
       value: 2.7,
       change: -0.5,
       platform: "twitter",
-    },
-  ];
-
-  const topPerformingContent: Content[] = [
-    {
-      id: "1",
-      type: "image",
-      intent: "promotional",
-      platform: "instagram",
-      content: "Our new summer collection has arrived! Check it out now. #fashion #summer #newcollection",
-      mediaUrl: "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1770&q=80",
-      status: "published",
-      createdAt: new Date("2023-06-15"),
-      publishedAt: new Date("2023-06-15"),
-      metrics: {
-        likes: 423,
-        comments: 56,
-        shares: 28,
-        views: 2890,
-      },
-    },
-    {
-      id: "2",
-      type: "text",
-      intent: "news",
-      platform: "twitter",
-      content: "We're thrilled to announce our new partnership with @brandname! Stay tuned for exciting collaborations.",
-      status: "published",
-      createdAt: new Date("2023-06-10"),
-      publishedAt: new Date("2023-06-10"),
-      metrics: {
-        likes: 287,
-        comments: 34,
-        shares: 92,
-        views: 1540,
-      },
     },
   ];
 
@@ -197,14 +166,16 @@ const Dashboard: React.FC = () => {
 
       <div className="mb-6 flex items-center justify-between">
         <h2 className="text-xl font-semibold">Top Performing Content</h2>
-        <Button variant="ghost" className="flex items-center text-muted-foreground">
-          <span>View All</span>
-          <ArrowRight size={16} className="ml-1" />
+        <Button variant="ghost" asChild className="flex items-center text-muted-foreground">
+          <Link to="/pending-content?status=published">
+            <span>View All</span>
+            <ArrowRight size={16} className="ml-1" />
+          </Link>
         </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {topPerformingContent.map((content) => (
+        {topPerformingContent.slice(0, 2).map((content) => (
           <ContentCard key={content.id} content={content} />
         ))}
         <Card className="flex flex-col items-center justify-center p-6 border-dashed border-2 hover:border-primary/50 transition-colors">
@@ -214,7 +185,7 @@ const Dashboard: React.FC = () => {
           <h3 className="text-lg font-medium mb-1">Create New Content</h3>
           <p className="text-center text-muted-foreground text-sm mb-4">Generate new content for your social media platforms</p>
           <Button asChild>
-            <a href="/content-generation">Get Started</a>
+            <Link to="/content-generation">Get Started</Link>
           </Button>
         </Card>
       </div>
