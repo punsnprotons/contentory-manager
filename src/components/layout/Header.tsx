@@ -14,12 +14,10 @@ const Header: React.FC = () => {
     <header className="sticky top-0 z-50 w-full h-16 bg-background/80 backdrop-blur-md border-b border-border flex items-center justify-between px-4 transition-all duration-300">
       <div className="flex items-center">
         {isMobile ? (
-          <SidebarTrigger>
-            {({ isOpen }) => (
-              <Button variant="ghost" size="icon" className="mr-2">
-                {isOpen ? <X size={20} /> : <Menu size={20} />}
-              </Button>
-            )}
+          <SidebarTrigger asChild>
+            <Button variant="ghost" size="icon" className="mr-2">
+              <Menu size={20} />
+            </Button>
           </SidebarTrigger>
         ) : null}
         <div className="flex items-center">
