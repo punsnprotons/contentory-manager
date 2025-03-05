@@ -1,6 +1,6 @@
 
 import React, { useState } from "react";
-import { Sparkles, LayoutGrid, Image, Video, AlignLeft, Send } from "lucide-react";
+import { Sparkles, LayoutGrid, Image, Video, AlignLeft, Send, RotateCw } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -9,14 +9,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ContentType, ContentIntent, SocialPlatform } from "@/types";
 import ContentCard from "@/components/ui/ContentCard";
 import { toast } from "@/hooks/use-toast";
+import { useGenerateContent } from "@/hooks/useGenerateContent";
 
 const ContentGeneration: React.FC = () => {
   const [selectedContentType, setSelectedContentType] = useState<ContentType>("text");
   const [selectedIntent, setSelectedIntent] = useState<ContentIntent>("promotional");
   const [selectedPlatform, setSelectedPlatform] = useState<SocialPlatform>("instagram");
   const [prompt, setPrompt] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState<string>("");
+  const [mediaUrl, setMediaUrl] = useState<string | undefined>(undefined);
+  
+  const { generateContent, isGenerating } = useGenerateContent();
 
   const contentTypes: { value: ContentType; label: string; icon: React.ReactNode }[] = [
     { value: "text", label: "Text Post", icon: <AlignLeft size={18} /> },
@@ -24,7 +27,7 @@ const ContentGeneration: React.FC = () => {
     { value: "video", label: "Video Post", icon: <Video size={18} /> },
   ];
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!prompt.trim()) {
       toast({
         title: "Missing information",
@@ -34,35 +37,33 @@ const ContentGeneration: React.FC = () => {
       return;
     }
 
-    setIsGenerating(true);
-
-    // Simulate AI generation - in a real app this would call an API
-    setTimeout(() => {
-      let content = "";
-
-      switch (selectedIntent) {
-        case "promotional":
-          content = "🚀 Exciting news! Our latest collection just dropped and it's already getting rave reviews. Limited quantities available, so don't miss out! #NewLaunch #LimitedEdition";
-          break;
-        case "feature":
-          content = "We've listened to your feedback! Our app now includes the most requested feature: dark mode. Update now to experience it! #NewFeature #DarkMode";
-          break;
-        case "news":
-          content = "We're thrilled to announce our partnership with @partnerbrand! Together, we'll be bringing you exclusive content and special offers. Stay tuned for more details!";
-          break;
-        case "poll":
-          content = "We're considering adding new features to our service. Which would you prefer to see first?\n\n- Extended customer support hours\n- More payment options\n- Loyalty rewards program\n\nLet us know in the comments!";
-          break;
-      }
-
-      setGeneratedContent(content);
-      setIsGenerating(false);
-
+    try {
+      const result = await generateContent({
+        contentType: selectedContentType,
+        platform: selectedPlatform,
+        intent: selectedIntent,
+        prompt: prompt
+      });
+      
+      setGeneratedContent(result.content);
+      setMediaUrl(result.mediaUrl);
+      
       toast({
         title: "Content generated",
         description: "Your content has been successfully generated!",
       });
-    }, 2000);
+    } catch (error) {
+      console.error("Error generating content:", error);
+      toast({
+        title: "Generation failed",
+        description: error instanceof Error ? error.message : "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRegenerate = () => {
+    handleGenerate();
   };
 
   return (
@@ -258,7 +259,18 @@ const ContentGeneration: React.FC = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="min-h-[300px] flex items-center justify-center">
-              {!generatedContent ? (
+              {isGenerating ? (
+                <div className="text-center text-muted-foreground">
+                  <div className="flex flex-col items-center justify-center">
+                    <svg className="animate-spin mb-4 h-10 w-10 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <p>Generating your content...</p>
+                    <p className="text-sm mt-2">This may take a few moments</p>
+                  </div>
+                </div>
+              ) : !generatedContent ? (
                 <div className="text-center text-muted-foreground">
                   <p>Your generated content will appear here</p>
                 </div>
@@ -273,7 +285,7 @@ const ContentGeneration: React.FC = () => {
                       content: generatedContent,
                       status: "draft",
                       createdAt: new Date(),
-                      mediaUrl: selectedContentType !== "text" ? "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1770&q=80" : undefined,
+                      mediaUrl: mediaUrl,
                     }}
                     onSchedule={() => {
                       toast({
@@ -292,9 +304,10 @@ const ContentGeneration: React.FC = () => {
               )}
             </CardContent>
             <CardFooter className="flex justify-end space-x-2">
-              {generatedContent && (
+              {generatedContent && !isGenerating && (
                 <>
-                  <Button variant="outline">
+                  <Button variant="outline" onClick={handleRegenerate}>
+                    <RotateCw size={16} className="mr-1" />
                     Regenerate
                   </Button>
                   <Button variant="outline">
