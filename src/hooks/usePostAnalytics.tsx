@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Content } from '@/types';
@@ -88,6 +89,10 @@ export const usePostAnalytics = () => {
   });
   const [postsThisMonth, setPostsThisMonth] = useState(0);
   const [avgReach, setAvgReach] = useState(0);
+  const [platformDistribution, setPlatformDistribution] = useState({
+    instagram: 65,
+    twitter: 35
+  });
 
   useEffect(() => {
     const fetchPostsWithAnalytics = async () => {
@@ -243,6 +248,25 @@ export const usePostAnalytics = () => {
           }, {} as Record<string, any>);
           
           setPlatformData(Object.values(monthlyData));
+
+          // Calculate platform distribution based on real engagement data
+          const instagramTotal = performanceData
+            .filter(item => item.platform === 'instagram')
+            .reduce((sum, item) => sum + item.total_likes + item.total_comments + item.total_shares, 0);
+          
+          const twitterTotal = performanceData
+            .filter(item => item.platform === 'twitter')
+            .reduce((sum, item) => sum + item.total_likes + item.total_comments + item.total_shares, 0);
+          
+          const total = instagramTotal + twitterTotal;
+          
+          if (total > 0) {
+            const instagramPercentage = Math.round((instagramTotal / total) * 100);
+            setPlatformDistribution({
+              instagram: instagramPercentage,
+              twitter: 100 - instagramPercentage
+            });
+          }
         } else {
           // Use sample data if no real data
           const samplePlatformData = [
@@ -488,6 +512,7 @@ export const usePostAnalytics = () => {
     followerMetrics,
     engagementRate,
     postsThisMonth,
-    avgReach
+    avgReach,
+    platformDistribution
   };
 };

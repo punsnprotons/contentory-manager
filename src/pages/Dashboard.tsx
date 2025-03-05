@@ -29,7 +29,8 @@ const Dashboard: React.FC = () => {
     followerMetrics,
     engagementRate,
     postsThisMonth,
-    avgReach
+    avgReach,
+    platformDistribution
   } = usePostAnalytics();
 
   // Create metrics from real data
@@ -59,7 +60,7 @@ const Dashboard: React.FC = () => {
       id: "4",
       label: "Posts This Month",
       value: postsThisMonth,
-      change: postsThisMonth * 0.1, // Just an example change value
+      change: postsThisMonth > 0 ? parseFloat(((postsThisMonth - (postsThisMonth / 1.1)) / (postsThisMonth / 1.1) * 100).toFixed(1)) : 0,
       platform: "twitter",
     },
   ];
@@ -120,10 +121,10 @@ const Dashboard: React.FC = () => {
                   <div className="mr-2 h-4 w-4 rounded-full bg-pink-400" />
                   <span className="text-sm font-medium">Instagram</span>
                 </div>
-                <span className="text-sm font-bold">65%</span>
+                <span className="text-sm font-bold">{platformDistribution.instagram}%</span>
               </div>
               <div className="h-2 w-full bg-pink-100 rounded-full overflow-hidden">
-                <div className="h-full bg-pink-400 rounded-full" style={{ width: "65%" }} />
+                <div className="h-full bg-pink-400 rounded-full" style={{ width: `${platformDistribution.instagram}%` }} />
               </div>
 
               <div className="flex justify-between items-center">
@@ -131,10 +132,10 @@ const Dashboard: React.FC = () => {
                   <div className="mr-2 h-4 w-4 rounded-full bg-blue-400" />
                   <span className="text-sm font-medium">Twitter</span>
                 </div>
-                <span className="text-sm font-bold">35%</span>
+                <span className="text-sm font-bold">{platformDistribution.twitter}%</span>
               </div>
               <div className="h-2 w-full bg-blue-100 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-400 rounded-full" style={{ width: "35%" }} />
+                <div className="h-full bg-blue-400 rounded-full" style={{ width: `${platformDistribution.twitter}%` }} />
               </div>
 
               <div className="pt-4 space-y-2">
