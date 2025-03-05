@@ -1,9 +1,15 @@
 
-import React from "react";
-import { BarChart, Calendar, TrendingUp, Users } from "lucide-react";
+import React, { useState } from "react";
+import { BarChart, Calendar, TrendingUp, Users, Activity, FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ResponsiveContainer, BarChart as RechartsBarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, LineChart, Line } from "recharts";
+import PostAnalytics from "@/components/analytics/PostAnalytics";
+import ActivityHistory from "@/components/analytics/ActivityHistory";
+import { usePostAnalytics } from "@/hooks/usePostAnalytics";
+import { useActivityHistory } from "@/hooks/useActivityHistory";
+import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 
 const data = [
   { name: "Jan", instagram: 400, twitter: 240 },
@@ -42,6 +48,13 @@ const MetricCard = ({ title, value, change, icon: Icon, trend = "up" }) => (
 );
 
 const Analytics: React.FC = () => {
+  const { posts, loading: postsLoading } = usePostAnalytics();
+  const { activities, loading: activitiesLoading } = useActivityHistory();
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("overview");
+
+  const selectedPost = selectedPostId ? posts.find(post => post.id === selectedPostId) : null;
+
   return (
     <div className="container-page animate-fade-in">
       <div className="flex justify-between items-center mb-6">
@@ -79,11 +92,13 @@ const Analytics: React.FC = () => {
         />
       </div>
 
-      <Tabs defaultValue="overview" className="mb-6">
+      <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="mb-6">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="engagement">Engagement</TabsTrigger>
           <TabsTrigger value="followers">Followers</TabsTrigger>
+          <TabsTrigger value="posts">Posts</TabsTrigger>
+          <TabsTrigger value="activity">Activity</TabsTrigger>
         </TabsList>
         <Card className="mt-4">
           <CardHeader>
@@ -126,6 +141,63 @@ const Analytics: React.FC = () => {
                   <Line type="monotone" dataKey="twitter" stroke="#1DA1F2" name="Twitter" />
                 </LineChart>
               </ResponsiveContainer>
+            </TabsContent>
+            <TabsContent value="posts" className="space-y-4">
+              {postsLoading ? (
+                <div className="py-6 text-center text-muted-foreground">Loading posts analytics...</div>
+              ) : posts.length === 0 ? (
+                <div className="py-6 text-center text-muted-foreground">No published posts found</div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {posts.map(post => (
+                      <Card 
+                        key={post.id} 
+                        className={`cursor-pointer transition-colors ${selectedPostId === post.id ? 'border-primary' : ''}`}
+                        onClick={() => setSelectedPostId(post.id)}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-start space-x-3">
+                            {post.mediaUrl && (
+                              <div className="w-12 h-12 rounded overflow-hidden shrink-0">
+                                <img 
+                                  src={post.mediaUrl} 
+                                  alt="Post" 
+                                  className="w-full h-full object-cover" 
+                                />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium line-clamp-2">{post.content}</p>
+                              <div className="flex mt-2 justify-between">
+                                <span className={`text-xs px-1.5 py-0.5 rounded-full 
+                                  ${post.platform === 'instagram' ? 'bg-pink-100 text-pink-800' : 'bg-blue-100 text-blue-800'}`}
+                                >
+                                  {post.platform}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {post.metrics?.views || 0} views
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                  
+                  {selectedPost && <PostAnalytics content={selectedPost} />}
+                </div>
+              )}
+            </TabsContent>
+            <TabsContent value="activity">
+              {activitiesLoading ? (
+                <div className="py-6 text-center text-muted-foreground">Loading activity history...</div>
+              ) : activities.length === 0 ? (
+                <div className="py-6 text-center text-muted-foreground">No activity found</div>
+              ) : (
+                <ActivityHistory activities={activities} />
+              )}
             </TabsContent>
           </CardContent>
         </Card>

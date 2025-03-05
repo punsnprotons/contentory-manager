@@ -9,6 +9,54 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      activity_history: {
+        Row: {
+          activity_detail: Json | null
+          activity_type: string
+          content_id: string | null
+          created_at: string
+          id: string
+          occurred_at: string
+          platform: Database["public"]["Enums"]["social_platform"]
+          user_id: string
+        }
+        Insert: {
+          activity_detail?: Json | null
+          activity_type: string
+          content_id?: string | null
+          created_at?: string
+          id?: string
+          occurred_at?: string
+          platform: Database["public"]["Enums"]["social_platform"]
+          user_id: string
+        }
+        Update: {
+          activity_detail?: Json | null
+          activity_type?: string
+          content_id?: string | null
+          created_at?: string
+          id?: string
+          occurred_at?: string
+          platform?: Database["public"]["Enums"]["social_platform"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_history_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "content"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_messages: {
         Row: {
           created_at: string
