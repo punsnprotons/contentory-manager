@@ -1,6 +1,6 @@
 
 import React, { useState } from "react";
-import { Sparkles, LayoutGrid, Image, Video, AlignLeft, Send, RotateCw } from "lucide-react";
+import { Sparkles, LayoutGrid, Image, Video, AlignLeft, Send, RotateCw, Save } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,6 +10,9 @@ import { ContentType, ContentIntent, SocialPlatform } from "@/types";
 import ContentCard from "@/components/ui/ContentCard";
 import { toast } from "@/hooks/use-toast";
 import { useGenerateContent } from "@/hooks/useGenerateContent";
+import ScheduleDialog from "@/components/ui/ScheduleDialog";
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
 
 const ContentGeneration: React.FC = () => {
   const [selectedContentType, setSelectedContentType] = useState<ContentType>("text");
@@ -18,14 +21,31 @@ const ContentGeneration: React.FC = () => {
   const [prompt, setPrompt] = useState("");
   const [generatedContent, setGeneratedContent] = useState<string>("");
   const [mediaUrl, setMediaUrl] = useState<string | undefined>(undefined);
+  const [contentId, setContentId] = useState<string | null>(null);
+  const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false);
   
-  const { generateContent, isGenerating } = useGenerateContent();
+  const navigate = useNavigate();
+  const { generateContent, saveContent, publishContent, scheduleContent, isGenerating, isSaving } = useGenerateContent();
 
   const contentTypes: { value: ContentType; label: string; icon: React.ReactNode }[] = [
     { value: "text", label: "Text Post", icon: <AlignLeft size={18} /> },
     { value: "image", label: "Image Post", icon: <Image size={18} /> },
     { value: "video", label: "Video Post", icon: <Video size={18} /> },
   ];
+
+  // Check if user is authenticated
+  const checkAuth = async () => {
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) {
+      toast({
+        title: "Authentication required",
+        description: "You need to be logged in to save or publish content.",
+        variant: "destructive",
+      });
+      return false;
+    }
+    return true;
+  };
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -47,6 +67,7 @@ const ContentGeneration: React.FC = () => {
       
       setGeneratedContent(result.content);
       setMediaUrl(result.mediaUrl);
+      setContentId(null); // Reset content ID when new content is generated
       
       toast({
         title: "Content generated",
@@ -56,6 +77,117 @@ const ContentGeneration: React.FC = () => {
       console.error("Error generating content:", error);
       toast({
         title: "Generation failed",
+        description: error instanceof Error ? error.message : "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSaveAsDraft = async () => {
+    if (!generatedContent || !await checkAuth()) return;
+    
+    try {
+      const id = await saveContent({
+        content: generatedContent,
+        mediaUrl,
+        contentType: selectedContentType,
+        platform: selectedPlatform,
+        intent: selectedIntent,
+        status: 'draft'
+      });
+      
+      setContentId(id);
+      
+      toast({
+        title: "Draft saved",
+        description: "Your content has been saved as a draft.",
+      });
+    } catch (error) {
+      console.error("Error saving draft:", error);
+      toast({
+        title: "Saving failed",
+        description: error instanceof Error ? error.message : "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handlePublish = async () => {
+    if (!generatedContent || !await checkAuth()) return;
+    
+    try {
+      // If content hasn't been saved yet, save it first as published
+      if (!contentId) {
+        const id = await saveContent({
+          content: generatedContent,
+          mediaUrl,
+          contentType: selectedContentType,
+          platform: selectedPlatform,
+          intent: selectedIntent,
+          status: 'published'
+        });
+        setContentId(id);
+      } else {
+        // If already saved, update its status to published
+        await publishContent(contentId);
+      }
+      
+      toast({
+        title: "Content published",
+        description: "Your content has been successfully published!",
+      });
+      
+      // Redirect to the pending content page after publishing
+      navigate("/pending-content");
+    } catch (error) {
+      console.error("Error publishing content:", error);
+      toast({
+        title: "Publishing failed",
+        description: error instanceof Error ? error.message : "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleScheduleClick = () => {
+    if (!checkAuth()) return;
+    setIsScheduleDialogOpen(true);
+  };
+
+  const handleScheduleConfirm = async (scheduledDate: Date) => {
+    if (!generatedContent || !await checkAuth()) return;
+    
+    try {
+      // If content hasn't been saved yet, save it first as scheduled
+      if (!contentId) {
+        const id = await saveContent({
+          content: generatedContent,
+          mediaUrl,
+          contentType: selectedContentType,
+          platform: selectedPlatform,
+          intent: selectedIntent,
+          status: 'scheduled',
+          scheduledFor: scheduledDate
+        });
+        setContentId(id);
+      } else {
+        // If already saved, update its status to scheduled
+        await scheduleContent(contentId, scheduledDate);
+      }
+      
+      setIsScheduleDialogOpen(false);
+      
+      toast({
+        title: "Content scheduled",
+        description: `Your content has been scheduled for ${scheduledDate.toLocaleString()}.`,
+      });
+      
+      // Redirect to the calendar page after scheduling
+      navigate("/content-calendar");
+    } catch (error) {
+      console.error("Error scheduling content:", error);
+      toast({
+        title: "Scheduling failed",
         description: error instanceof Error ? error.message : "An unexpected error occurred.",
         variant: "destructive",
       });
@@ -278,7 +410,7 @@ const ContentGeneration: React.FC = () => {
                 <div className="w-full">
                   <ContentCard
                     content={{
-                      id: "preview",
+                      id: contentId || "preview",
                       type: selectedContentType,
                       intent: selectedIntent,
                       platform: selectedPlatform,
@@ -287,18 +419,8 @@ const ContentGeneration: React.FC = () => {
                       createdAt: new Date(),
                       mediaUrl: mediaUrl,
                     }}
-                    onSchedule={() => {
-                      toast({
-                        title: "Content scheduled",
-                        description: "Your content has been scheduled for posting.",
-                      });
-                    }}
-                    onPublish={() => {
-                      toast({
-                        title: "Content published",
-                        description: "Your content has been published successfully.",
-                      });
-                    }}
+                    onSchedule={handleScheduleClick}
+                    onPublish={handlePublish}
                   />
                 </div>
               )}
@@ -306,16 +428,17 @@ const ContentGeneration: React.FC = () => {
             <CardFooter className="flex justify-end space-x-2">
               {generatedContent && !isGenerating && (
                 <>
-                  <Button variant="outline" onClick={handleRegenerate}>
+                  <Button variant="outline" onClick={handleRegenerate} disabled={isGenerating || isSaving}>
                     <RotateCw size={16} className="mr-1" />
                     Regenerate
                   </Button>
-                  <Button variant="outline">
-                    Save as Draft
+                  <Button variant="outline" onClick={handleSaveAsDraft} disabled={isSaving}>
+                    <Save size={16} className="mr-1" />
+                    {isSaving ? "Saving..." : "Save as Draft"}
                   </Button>
-                  <Button className="flex items-center">
+                  <Button onClick={handleScheduleClick} disabled={isSaving} className="flex items-center">
                     <Send size={16} className="mr-1" />
-                    Schedule
+                    {isSaving ? "Processing..." : "Schedule"}
                   </Button>
                 </>
               )}
@@ -323,6 +446,13 @@ const ContentGeneration: React.FC = () => {
           </Card>
         </div>
       </div>
+
+      <ScheduleDialog 
+        open={isScheduleDialogOpen}
+        onOpenChange={setIsScheduleDialogOpen}
+        onSchedule={handleScheduleConfirm}
+        isScheduling={isSaving}
+      />
     </div>
   );
 };

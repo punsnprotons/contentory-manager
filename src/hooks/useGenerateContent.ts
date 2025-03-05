@@ -1,6 +1,7 @@
-
 import { useState } from 'react';
 import { ContentType, ContentIntent, SocialPlatform } from '@/types';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
 
 interface GenerateContentParams {
   contentType: ContentType;
@@ -14,8 +15,19 @@ interface GeneratedContent {
   mediaUrl?: string;
 }
 
+interface SaveContentParams {
+  content: string;
+  mediaUrl?: string;
+  contentType: ContentType;
+  platform: SocialPlatform;
+  intent: ContentIntent;
+  status: 'draft' | 'scheduled' | 'published';
+  scheduledFor?: Date;
+}
+
 export const useGenerateContent = () => {
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const OPENAI_API_KEY = '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';
   const REPLICATE_API_TOKEN = 'r8_TBWJFh8CEY4K1S6BzI2E1EzGRXogHDS3sZ5aC';
@@ -36,6 +48,84 @@ export const useGenerateContent = () => {
       }
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const saveContent = async (params: SaveContentParams): Promise<string> => {
+    setIsSaving(true);
+    
+    try {
+      // Get the current authenticated user
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error("You must be logged in to save content");
+      }
+      
+      // Insert content into the database
+      const { data, error } = await supabase
+        .from('content')
+        .insert({
+          content: params.content,
+          media_url: params.mediaUrl,
+          type: params.contentType,
+          platform: params.platform,
+          intent: params.intent,
+          status: params.status,
+          scheduled_for: params.scheduledFor ? params.scheduledFor.toISOString() : null,
+          published_at: params.status === 'published' ? new Date().toISOString() : null,
+          user_id: user.id
+        })
+        .select()
+        .single();
+      
+      if (error) {
+        throw error;
+      }
+      
+      return data.id;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const publishContent = async (contentId: string): Promise<void> => {
+    setIsSaving(true);
+    
+    try {
+      const { error } = await supabase
+        .from('content')
+        .update({
+          status: 'published',
+          published_at: new Date().toISOString()
+        })
+        .eq('id', contentId);
+      
+      if (error) {
+        throw error;
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const scheduleContent = async (contentId: string, scheduledDate: Date): Promise<void> => {
+    setIsSaving(true);
+    
+    try {
+      const { error } = await supabase
+        .from('content')
+        .update({
+          status: 'scheduled',
+          scheduled_for: scheduledDate.toISOString()
+        })
+        .eq('id', contentId);
+      
+      if (error) {
+        throw error;
+      }
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -225,6 +315,10 @@ Content Intent: ${params.intent}
 
   return {
     generateContent,
-    isGenerating
+    saveContent,
+    publishContent,
+    scheduleContent,
+    isGenerating,
+    isSaving
   };
 };

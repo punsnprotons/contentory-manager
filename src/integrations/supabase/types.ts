@@ -585,7 +585,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      check_and_publish_scheduled_content: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
     }
     Enums: {
       content_intent: "promotional" | "feature" | "news" | "poll"
