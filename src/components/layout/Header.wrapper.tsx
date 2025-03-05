@@ -1,5 +1,5 @@
 
-import { Header } from './Header';
+import Header from './Header';
 import AuthButton from './AuthButton';
 
 // This wrapper component allows us to add the AuthButton to the Header
