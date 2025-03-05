@@ -39,7 +39,8 @@ const Analytics: React.FC = () => {
     engagementRate,
     postsThisMonth,
     avgReach,
-    topPerformingContent
+    topPerformingContent,
+    refreshData
   } = usePostAnalytics();
   
   const { activities, loading: activitiesLoading } = useActivityHistory();
@@ -52,6 +53,30 @@ const Analytics: React.FC = () => {
   const formatNumber = (num: number) => {
     return num.toLocaleString();
   };
+  
+  // Count posts by platform
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
+  
+  const instagramPostsCount = posts.filter(post => 
+    post.publishedAt && 
+    post.publishedAt.getMonth() === currentMonth &&
+    post.publishedAt.getFullYear() === currentYear &&
+    post.platform === 'instagram'
+  ).length;
+  
+  const twitterPostsCount = posts.filter(post => 
+    post.publishedAt && 
+    post.publishedAt.getMonth() === currentMonth &&
+    post.publishedAt.getFullYear() === currentYear &&
+    post.platform === 'twitter'
+  ).length;
+
+  // Force a refresh of data when component mounts
+  useEffect(() => {
+    console.log("Analytics page mounted, refreshing data");
+    refreshData();
+  }, [refreshData]);
 
   return (
     <div className="container-page animate-fade-in">
@@ -88,6 +113,54 @@ const Analytics: React.FC = () => {
           icon={TrendingUp}
           trend={avgReach > 0 ? "down" : "up"}
         />
+      </div>
+
+      {/* Platform-specific metrics */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Instagram Posts</CardTitle>
+            <div className="h-4 w-4 rounded-full bg-pink-400" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{instagramPostsCount}</div>
+            <p className="text-xs text-muted-foreground mt-1">Published this month</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Twitter Posts</CardTitle>
+            <div className="h-4 w-4 rounded-full bg-blue-400" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{twitterPostsCount}</div>
+            <p className="text-xs text-muted-foreground mt-1">Published this month</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Instagram Followers</CardTitle>
+            <div className="h-4 w-4 rounded-full bg-pink-400" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatNumber(followerMetrics.instagram.count)}</div>
+            <p className={`text-xs text-green-500 flex items-center mt-1`}>
+              <TrendingUp className="mr-1 h-3 w-3" />{followerMetrics.instagram.change}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Twitter Followers</CardTitle>
+            <div className="h-4 w-4 rounded-full bg-blue-400" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatNumber(followerMetrics.twitter.count)}</div>
+            <p className={`text-xs text-green-500 flex items-center mt-1`}>
+              <TrendingUp className="mr-1 h-3 w-3" />{followerMetrics.twitter.change}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="mb-6">

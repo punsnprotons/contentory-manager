@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Content } from '@/types';
@@ -92,7 +91,7 @@ export const usePostAnalytics = () => {
       
       // Calculate posts this month regardless of data source
       const currentMonth = new Date().getMonth();
-      let publishedPostsThisMonth = 0;
+      const currentYear = new Date().getFullYear();
       
       // If no posts found, initialize with empty arrays and defaults
       if (!postsData || postsData.length === 0) {
@@ -186,11 +185,14 @@ export const usePostAnalytics = () => {
       setPosts(transformedPosts);
       setUsingSampleData(false);
       
-      // Calculate posts this month from real data
-      publishedPostsThisMonth = transformedPosts.filter(post => 
-        post.publishedAt && post.publishedAt.getMonth() === currentMonth
+      // Calculate posts this month from real data - count per platform
+      const publishedPostsThisMonth = transformedPosts.filter(post => 
+        post.publishedAt && 
+        post.publishedAt.getMonth() === currentMonth &&
+        post.publishedAt.getFullYear() === currentYear
       ).length;
       
+      // Update total posts this month
       setPostsThisMonth(publishedPostsThisMonth);
       
       // Calculate average reach from real data
@@ -451,9 +453,44 @@ export const usePostAnalytics = () => {
       
       // Calculate posts this month if we don't have that data yet from content
       if (postsThisMonth === 0) {
-        const instagramPosts = currentInstagramStats?.post_count || 0;
-        const twitterPosts = currentTwitterStats?.post_count || 0;
-        const totalPosts = instagramPosts + twitterPosts;
+        // For postsThisMonth, directly query the content table to ensure accuracy
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+        
+        // Query for Instagram posts this month
+        const { data: instagramPosts, error: instagramError } = await supabase
+          .from('content')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('status', 'published')
+          .eq('platform', 'instagram')
+          .gte('published_at', new Date(currentYear, currentMonth, 1).toISOString())
+          .lte('published_at', new Date(currentYear, currentMonth + 1, 0).toISOString());
+          
+        if (instagramError) {
+          console.error("Error fetching Instagram posts count:", instagramError);
+        }
+        
+        // Query for Twitter posts this month
+        const { data: twitterPosts, error: twitterError } = await supabase
+          .from('content')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('status', 'published')
+          .eq('platform', 'twitter')
+          .gte('published_at', new Date(currentYear, currentMonth, 1).toISOString())
+          .lte('published_at', new Date(currentYear, currentMonth + 1, 0).toISOString());
+          
+        if (twitterError) {
+          console.error("Error fetching Twitter posts count:", twitterError);
+        }
+        
+        // Calculate total posts from direct queries
+        const instagramPostCount = instagramPosts?.length || 0;
+        const twitterPostCount = twitterPosts?.length || 0;
+        const totalPosts = instagramPostCount + twitterPostCount;
+        
+        console.log(`Directly counted posts: Instagram: ${instagramPostCount}, Twitter: ${twitterPostCount}, Total: ${totalPosts}`);
         
         setPostsThisMonth(totalPosts);
       }
@@ -513,7 +550,7 @@ export const usePostAnalytics = () => {
         schema: 'public', 
         table: 'content' 
       }, () => {
-        console.log('Content table changed');
+        console.log('Content table changed, refreshing data');
         fetchPostsWithAnalytics();
       })
       .subscribe();

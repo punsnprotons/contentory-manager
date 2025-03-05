@@ -31,13 +31,37 @@ const Dashboard: React.FC = () => {
     postsThisMonth,
     avgReach,
     platformDistribution,
-    refreshData
+    refreshData,
+    posts
   } = usePostAnalytics();
 
   // Force a refresh of data when component mounts to ensure we have the latest data
   useEffect(() => {
+    console.log("Dashboard mounted, refreshing data");
     refreshData();
   }, []);
+
+  // Count posts this month by platform
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
+  
+  // Count Instagram posts this month
+  const instagramPostsThisMonth = posts.filter(post => 
+    post.publishedAt && 
+    post.publishedAt.getMonth() === currentMonth &&
+    post.publishedAt.getFullYear() === currentYear &&
+    post.platform === 'instagram'
+  ).length;
+  
+  // Count Twitter posts this month
+  const twitterPostsThisMonth = posts.filter(post => 
+    post.publishedAt && 
+    post.publishedAt.getMonth() === currentMonth &&
+    post.publishedAt.getFullYear() === currentYear &&
+    post.platform === 'twitter'
+  ).length;
+  
+  console.log(`Dashboard client-side count: Instagram: ${instagramPostsThisMonth}, Twitter: ${twitterPostsThisMonth}`);
 
   // Create metrics from real data
   const metrics: Metric[] = [
@@ -120,7 +144,7 @@ const Dashboard: React.FC = () => {
 
         <Card className="overflow-hidden hover:shadow-md transition-shadow">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-medium">Performance Metrics</CardTitle>
+            <CardTitle className="text-lg font-medium">Platform Stats</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -144,6 +168,17 @@ const Dashboard: React.FC = () => {
               </div>
               <div className="h-2 w-full bg-blue-100 rounded-full overflow-hidden">
                 <div className="h-full bg-blue-400 rounded-full" style={{ width: `${platformDistribution.twitter}%` }} />
+              </div>
+
+              <div className="pt-1 space-y-2">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-pink-500 font-medium">Instagram Posts:</span>
+                  <span className="font-bold">{instagramPostsThisMonth}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-blue-500 font-medium">Twitter Posts:</span>
+                  <span className="font-bold">{twitterPostsThisMonth}</span>
+                </div>
               </div>
 
               <div className="pt-4 space-y-2">
