@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { BarChart, Calendar, TrendingUp, Users, Activity } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -210,7 +210,7 @@ const Analytics: React.FC = () => {
             <div className="space-y-4">
               {postsLoading ? (
                 <div className="py-4 text-center text-muted-foreground">Loading top content...</div>
-              ) : topPerformingContent.length === 0 ? (
+              ) : !topPerformingContent || topPerformingContent.length === 0 ? (
                 <div className="py-4 text-center text-muted-foreground">No published content found</div>
               ) : (
                 topPerformingContent.map((content, index) => (
@@ -243,7 +243,7 @@ const Analytics: React.FC = () => {
                   </div>
                 ))
               )}
-              {topPerformingContent.length > 0 && (
+              {topPerformingContent && topPerformingContent.length > 0 && (
                 <div className="pt-2">
                   <Button variant="ghost" asChild className="w-full text-sm">
                     <Link to="/pending-content?status=published">View all published content</Link>

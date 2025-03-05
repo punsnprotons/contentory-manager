@@ -145,28 +145,36 @@ const Dashboard: React.FC = () => {
                 <div className="flex items-center text-sm">
                   <Heart size={16} className="mr-2 text-red-500" />
                   <span className="font-medium">
-                    {topPerformingContent.reduce((total, content) => total + (content.metrics?.likes || 0), 0).toLocaleString()}
+                    {(!topPerformingContent || topPerformingContent.length === 0) ? 
+                      0 : 
+                      topPerformingContent.reduce((total, content) => total + (content.metrics?.likes || 0), 0).toLocaleString()}
                   </span>
                   <span className="text-muted-foreground ml-1">total likes</span>
                 </div>
                 <div className="flex items-center text-sm">
                   <MessageCircle size={16} className="mr-2 text-blue-500" />
                   <span className="font-medium">
-                    {topPerformingContent.reduce((total, content) => total + (content.metrics?.comments || 0), 0).toLocaleString()}
+                    {(!topPerformingContent || topPerformingContent.length === 0) ? 
+                      0 : 
+                      topPerformingContent.reduce((total, content) => total + (content.metrics?.comments || 0), 0).toLocaleString()}
                   </span>
                   <span className="text-muted-foreground ml-1">comments</span>
                 </div>
                 <div className="flex items-center text-sm">
                   <Share2 size={16} className="mr-2 text-green-500" />
                   <span className="font-medium">
-                    {topPerformingContent.reduce((total, content) => total + (content.metrics?.shares || 0), 0).toLocaleString()}
+                    {(!topPerformingContent || topPerformingContent.length === 0) ? 
+                      0 : 
+                      topPerformingContent.reduce((total, content) => total + (content.metrics?.shares || 0), 0).toLocaleString()}
                   </span>
                   <span className="text-muted-foreground ml-1">shares</span>
                 </div>
                 <div className="flex items-center text-sm">
                   <Eye size={16} className="mr-2 text-purple-500" />
                   <span className="font-medium">
-                    {topPerformingContent.reduce((total, content) => total + (content.metrics?.views || 0), 0).toLocaleString()}
+                    {(!topPerformingContent || topPerformingContent.length === 0) ? 
+                      0 : 
+                      topPerformingContent.reduce((total, content) => total + (content.metrics?.views || 0), 0).toLocaleString()}
                   </span>
                   <span className="text-muted-foreground ml-1">views</span>
                 </div>
@@ -194,7 +202,7 @@ const Dashboard: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {topPerformingContent.length > 0 ? (
+          {topPerformingContent && topPerformingContent.length > 0 ? (
             // Render actual content cards when we have top performing content
             topPerformingContent.slice(0, 2).map((content) => (
               <ContentCard key={content.id} content={content} />

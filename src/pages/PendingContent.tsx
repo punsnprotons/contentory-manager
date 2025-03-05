@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Clock, Filter, Plus, Calendar as CalendarIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,11 +11,18 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { format } from "date-fns";
+import { Link } from "react-router-dom";
 
 const PendingContent: React.FC = () => {
-  const [status, setStatus] = useState<"all" | ContentStatus>("all");
+  const location = useLocation();
+  const urlParams = new URLSearchParams(location.search);
+  const statusFromUrl = urlParams.get('status');
+  
+  const initialStatus = statusFromUrl === 'published' ? 'published' : 'all';
+  
+  const [status, setStatus] = useState<"all" | "draft" | "scheduled" | "published">(initialStatus as any);
   const [platform, setPlatform] = useState<"all" | SocialPlatform>("all");
   const [type, setType] = useState<"all" | ContentType>("all");
   const [date, setDate] = useState<Date | undefined>(undefined);
@@ -25,6 +31,13 @@ const PendingContent: React.FC = () => {
   
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Update status if URL parameter changes
+    if (statusFromUrl === 'published' && status !== 'published') {
+      setStatus('published');
+    }
+  }, [statusFromUrl]);
 
   useEffect(() => {
     if (!user) {
@@ -38,7 +51,7 @@ const PendingContent: React.FC = () => {
     }
     
     fetchContent();
-  }, [user]);
+  }, [user, status]);
 
   const fetchContent = async () => {
     setIsLoading(true);
@@ -57,12 +70,22 @@ const PendingContent: React.FC = () => {
       }
       
       // Then fetch content for that user
-      const { data, error } = await supabase
+      let query = supabase
         .from('content')
         .select('*')
-        .eq('user_id', userData.id)
-        .in('status', ['draft', 'scheduled'])
-        .order('created_at', { ascending: false });
+        .eq('user_id', userData.id);
+      
+      // Filter by status if not "all"
+      if (status !== 'all') {
+        query = query.eq('status', status);
+      } else if (status === 'all' && statusFromUrl !== 'published') {
+        // If viewing "all" in the regular pending content view, exclude published content
+        query = query.in('status', ['draft', 'scheduled']);
+      }
+      
+      query = query.order('created_at', { ascending: false });
+      
+      const { data, error } = await query;
       
       if (error) {
         console.error("Error fetching content:", error);
@@ -80,7 +103,13 @@ const PendingContent: React.FC = () => {
         status: item.status as ContentStatus,
         createdAt: new Date(item.created_at),
         scheduledFor: item.scheduled_for ? new Date(item.scheduled_for) : undefined,
-        publishedAt: item.published_at ? new Date(item.published_at) : undefined
+        publishedAt: item.published_at ? new Date(item.published_at) : undefined,
+        metrics: item.metrics ? {
+          likes: item.metrics.likes || 0,
+          comments: item.metrics.comments || 0,
+          shares: item.metrics.shares || 0,
+          views: item.metrics.views || 0
+        } : undefined
       }));
       
       setContent(transformedContent);
@@ -98,7 +127,6 @@ const PendingContent: React.FC = () => {
 
   // Filter content based on selected filters
   const filteredContent = content.filter((item) => {
-    if (status !== "all" && item.status !== status) return false;
     if (platform !== "all" && item.platform !== platform) return false;
     if (type !== "all" && item.type !== type) return false;
     if (date && item.scheduledFor) {
@@ -171,22 +199,27 @@ const PendingContent: React.FC = () => {
   return (
     <div className="container-page animate-fade-in">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Pending Content</h1>
+        <h1 className="text-3xl font-bold">
+          {statusFromUrl === 'published' ? 'Published Content' : 'Pending Content'}
+        </h1>
         <Button asChild>
-          <a href="/content-generation" className="flex items-center">
+          <Link to="/content-generation" className="flex items-center">
             <Plus size={16} className="mr-1" />
             <span>Create New</span>
-          </a>
+          </Link>
         </Button>
       </div>
 
       <div className="mb-6">
-        <Tabs defaultValue="all" value={status} onValueChange={(value) => setStatus(value as any)}>
+        <Tabs defaultValue={initialStatus} value={status} onValueChange={(value) => setStatus(value as any)}>
           <div className="flex justify-between items-center mb-4">
             <TabsList>
               <TabsTrigger value="all">All</TabsTrigger>
               <TabsTrigger value="draft">Drafts</TabsTrigger>
               <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
+              {statusFromUrl === 'published' && (
+                <TabsTrigger value="published">Published</TabsTrigger>
+              )}
             </TabsList>
 
             <div className="flex items-center space-x-2">
@@ -313,7 +346,7 @@ const PendingContent: React.FC = () => {
                     No content matches your current filter settings.
                   </p>
                   <Button asChild>
-                    <a href="/content-generation">Create New Content</a>
+                    <Link to="/content-generation">Create New Content</Link>
                   </Button>
                 </CardContent>
               </Card>
@@ -345,7 +378,7 @@ const PendingContent: React.FC = () => {
                     You don't have any draft content yet.
                   </p>
                   <Button asChild>
-                    <a href="/content-generation">Create New Draft</a>
+                    <Link to="/content-generation">Create New Draft</Link>
                   </Button>
                 </CardContent>
               </Card>
@@ -377,7 +410,7 @@ const PendingContent: React.FC = () => {
                     You don't have any scheduled content yet.
                   </p>
                   <Button asChild>
-                    <a href="/content-generation">Create Content to Schedule</a>
+                    <Link to="/content-generation">Create Content to Schedule</Link>
                   </Button>
                 </CardContent>
               </Card>
@@ -394,6 +427,38 @@ const PendingContent: React.FC = () => {
               </div>
             )}
           </TabsContent>
+
+          {statusFromUrl === 'published' && (
+            <TabsContent value="published" className="mt-0">
+              {isLoading ? (
+                <div className="flex justify-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                </div>
+              ) : filteredContent.length === 0 ? (
+                <Card>
+                  <CardContent className="flex flex-col items-center justify-center py-10">
+                    <Clock size={48} className="text-muted-foreground mb-4" />
+                    <h3 className="text-xl font-medium mb-2">No Published Content</h3>
+                    <p className="text-muted-foreground text-center mb-4">
+                      You don't have any published content yet.
+                    </p>
+                    <Button asChild>
+                      <Link to="/content-generation">Create Content to Publish</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredContent.map((content) => (
+                    <ContentCard
+                      key={content.id}
+                      content={content}
+                    />
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </div>
