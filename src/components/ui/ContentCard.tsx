@@ -22,7 +22,6 @@ const ContentCard: React.FC<ContentCardProps> = ({
 }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  // Format date to show only the date part
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleDateString("en-US", {
       year: "numeric",
@@ -31,14 +30,12 @@ const ContentCard: React.FC<ContentCardProps> = ({
     });
   };
 
-  // Sample comments data - in a real app, this would come from an API
   const sampleComments = [
     { id: "1", user: "Alex Johnson", comment: "Love this content! Very insightful.", avatar: "https://i.pravatar.cc/150?u=a042581f4e2" },
     { id: "2", user: "Maria Garcia", comment: "Great post! Looking forward to more.", avatar: "https://i.pravatar.cc/150?u=a042581f4e3" },
     { id: "3", user: "Sam Wilson", comment: "This is exactly what I needed to see today.", avatar: "https://i.pravatar.cc/150?u=a042581f4e4" },
   ];
 
-  // Detailed analytics data - in a real app, this would come from an API
   const detailedAnalytics = {
     impressions: content.metrics?.views || 0,
     reach: Math.floor((content.metrics?.views || 0) * 0.8),
@@ -71,11 +68,22 @@ const ContentCard: React.FC<ContentCardProps> = ({
         <div className="relative">
           {content.mediaUrl && (
             <div className="h-48 overflow-hidden">
-              <img
-                src={content.mediaUrl}
-                alt="Content preview"
-                className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
-              />
+              {content.type === 'video' ? (
+                <video 
+                  src={content.mediaUrl}
+                  controls
+                  className="w-full h-full object-cover"
+                  preload="metadata"
+                >
+                  Your browser does not support the video tag.
+                </video>
+              ) : (
+                <img
+                  src={content.mediaUrl}
+                  alt="Content preview"
+                  className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                />
+              )}
             </div>
           )}
           <div className="absolute top-2 right-2 flex space-x-2">
@@ -205,11 +213,22 @@ const ContentCard: React.FC<ContentCardProps> = ({
               <div className="space-y-4">
                 {content.mediaUrl && (
                   <div className="overflow-hidden rounded-md">
-                    <img
-                      src={content.mediaUrl}
-                      alt="Content"
-                      className="w-full object-cover"
-                    />
+                    {content.type === 'video' ? (
+                      <video 
+                        src={content.mediaUrl}
+                        controls
+                        className="w-full"
+                        preload="metadata"
+                      >
+                        Your browser does not support the video tag.
+                      </video>
+                    ) : (
+                      <img
+                        src={content.mediaUrl}
+                        alt="Content"
+                        className="w-full object-cover"
+                      />
+                    )}
                   </div>
                 )}
                 <p className="text-base">{content.content}</p>

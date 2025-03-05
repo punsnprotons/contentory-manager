@@ -191,13 +191,27 @@ Content Intent: ${params.intent}
       const descriptionData = await descriptionResponse.json();
       const description = descriptionData.choices[0].message.content;
       
-      // Simulate Replicate API call (in a real app, you would call the actual API)
-      // Using a timeout to simulate the API call
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // For now, we'll use public sample video URLs based on content intent
+      // In a production app, you would call the Replicate API with proper authentication
+      let videoUrl = "";
       
-      // For demo purposes, return a placeholder video URL
-      // In a real implementation, you would call the Replicate API and get the actual URL
-      const videoUrl = "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+      // Use different sample videos based on content intent for better demonstration
+      switch(params.intent) {
+        case 'promotional':
+          videoUrl = "https://assets.mixkit.co/videos/preview/mixkit-small-waves-rushing-to-the-shore-2310-large.mp4";
+          break;
+        case 'feature':
+          videoUrl = "https://assets.mixkit.co/videos/preview/mixkit-hands-holding-a-smart-watch-from-different-views-32808-large.mp4";
+          break;
+        case 'news':
+          videoUrl = "https://assets.mixkit.co/videos/preview/mixkit-typing-on-smartphone-screen-4335-large.mp4";
+          break;
+        case 'poll':
+          videoUrl = "https://assets.mixkit.co/videos/preview/mixkit-woman-doing-yoga-in-a-forest-4897-large.mp4";
+          break;
+        default:
+          videoUrl = "https://assets.mixkit.co/videos/preview/mixkit-musician-playing-the-guitar-with-a-band-3386-large.mp4";
+      }
       
       return {
         content: description,
