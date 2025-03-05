@@ -19,7 +19,6 @@ import { Link } from "react-router-dom";
 import { usePostAnalytics } from "@/hooks/usePostAnalytics";
 import { useActivityHistory } from "@/hooks/useActivityHistory";
 import ActivityHistory from "@/components/analytics/ActivityHistory";
-import { Activity } from "@/types";
 
 const Dashboard: React.FC = () => {
   const { 
