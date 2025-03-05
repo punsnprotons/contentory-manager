@@ -1,3 +1,4 @@
+
 import React, { useEffect } from "react";
 import {
   BarChart as BarChartIcon,
@@ -7,7 +8,8 @@ import {
   Eye,
   ArrowRight,
   Zap,
-  Users
+  Users,
+  Activity
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
