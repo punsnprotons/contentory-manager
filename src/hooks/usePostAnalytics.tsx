@@ -3,10 +3,65 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Content } from '@/types';
 
+// Sample data to use when no real data is available
+const samplePosts: Content[] = [
+  {
+    id: "sample-1",
+    type: "image",
+    intent: "promotional",
+    platform: "instagram",
+    content: "Our new summer collection has arrived! Check it out now. #fashion #summer #newcollection",
+    mediaUrl: "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1770&q=80",
+    status: "published",
+    createdAt: new Date("2023-06-15"),
+    publishedAt: new Date("2023-06-15"),
+    metrics: {
+      likes: 423,
+      comments: 56,
+      shares: 28,
+      views: 2890,
+    },
+  },
+  {
+    id: "sample-2",
+    type: "text",
+    intent: "news",
+    platform: "twitter",
+    content: "We're thrilled to announce our new partnership with @brandname! Stay tuned for exciting collaborations.",
+    status: "published",
+    createdAt: new Date("2023-06-10"),
+    publishedAt: new Date("2023-06-10"),
+    metrics: {
+      likes: 287,
+      comments: 34,
+      shares: 92,
+      views: 1540,
+    },
+  },
+  {
+    id: "sample-3",
+    type: "image",
+    intent: "engagement",
+    platform: "instagram",
+    content: "What's your favorite product from our catalog? Let us know in the comments below!",
+    mediaUrl: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1770&q=80",
+    status: "published",
+    createdAt: new Date("2023-06-08"),
+    publishedAt: new Date("2023-06-08"),
+    metrics: {
+      likes: 512,
+      comments: 78,
+      shares: 45,
+      views: 3210,
+    },
+  }
+];
+
 export const usePostAnalytics = () => {
   const [posts, setPosts] = useState<Content[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [usingSampleData, setUsingSampleData] = useState(false);
 
   useEffect(() => {
     const fetchPostsWithAnalytics = async () => {
@@ -22,6 +77,15 @@ export const usePostAnalytics = () => {
           .limit(10);
         
         if (postsError) throw postsError;
+        
+        // If no posts found, use sample data
+        if (!postsData || postsData.length === 0) {
+          console.log("No published posts found, using sample data");
+          setPosts(samplePosts);
+          setUsingSampleData(true);
+          setLoading(false);
+          return;
+        }
         
         // Fetch metrics for these posts
         const postIds = postsData.map(post => post.id);
@@ -60,9 +124,13 @@ export const usePostAnalytics = () => {
         }));
         
         setPosts(transformedPosts);
+        setUsingSampleData(false);
       } catch (err) {
         console.error('Error fetching posts with analytics:', err);
         setError(err instanceof Error ? err : new Error('Unknown error occurred'));
+        // Use sample data in case of error
+        setPosts(samplePosts);
+        setUsingSampleData(true);
       } finally {
         setLoading(false);
       }
@@ -90,5 +158,5 @@ export const usePostAnalytics = () => {
     };
   }, []);
   
-  return { posts, loading, error };
+  return { posts, loading, error, usingSampleData };
 };
