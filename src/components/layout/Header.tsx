@@ -6,7 +6,11 @@ import { Input } from "@/components/ui/input";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-const Header: React.FC = () => {
+interface HeaderProps {
+  rightContent?: React.ReactNode;
+}
+
+const Header: React.FC<HeaderProps> = ({ rightContent }) => {
   const [showSearch, setShowSearch] = useState(false);
   const isMobile = useIsMobile();
 
@@ -57,13 +61,17 @@ const Header: React.FC = () => {
           <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
         </Button>
 
-        <Button variant="ghost" size="icon" className="rounded-full overflow-hidden">
-          <img
-            src="https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff"
-            alt="Profile"
-            className="w-8 h-8 object-cover"
-          />
-        </Button>
+        {rightContent ? (
+          rightContent
+        ) : (
+          <Button variant="ghost" size="icon" className="rounded-full overflow-hidden">
+            <img
+              src="https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff"
+              alt="Profile"
+              className="w-8 h-8 object-cover"
+            />
+          </Button>
+        )}
       </div>
     </header>
   );
