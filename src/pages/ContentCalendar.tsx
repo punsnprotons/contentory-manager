@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,61 +10,82 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import ContentCard from "@/components/ui/ContentCard";
 import { Link } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 
 const ContentCalendar: React.FC = () => {
   const [date, setDate] = useState<Date>(new Date());
   const [view, setView] = useState<"month" | "day">("month");
   const [platform, setPlatform] = useState<"all" | SocialPlatform>("all");
+  const [scheduledContent, setScheduledContent] = useState<Content[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Sample data - in a real app this would come from an API
-  const sampleContent: Content[] = [
-    {
-      id: "1",
-      type: "image",
-      intent: "promotional",
-      platform: "instagram",
-      content: "Our new summer collection has arrived! Check it out now. #fashion #summer #newcollection",
-      mediaUrl: "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1770&q=80",
-      status: "scheduled",
-      createdAt: new Date("2023-05-28"),
-      scheduledFor: new Date(new Date().getFullYear(), new Date().getMonth(), 15, 10, 0),
-    },
-    {
-      id: "2",
-      type: "text",
-      intent: "news",
-      platform: "twitter",
-      content: "We're thrilled to announce our new partnership with @brandname! Stay tuned for exciting collaborations.",
-      status: "scheduled",
-      createdAt: new Date("2023-05-25"),
-      scheduledFor: new Date(new Date().getFullYear(), new Date().getMonth(), 18, 14, 30),
-    },
-    {
-      id: "3",
-      type: "video",
-      intent: "feature",
-      platform: "instagram",
-      content: "Check out the new features we just added to our app! Now you can organize your content even better.",
-      mediaUrl: "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1674&q=80",
-      status: "scheduled",
-      createdAt: new Date("2023-05-20"),
-      scheduledFor: new Date(new Date().getFullYear(), new Date().getMonth(), 22, 9, 0),
-    },
-    {
-      id: "4",
-      type: "image",
-      intent: "poll",
-      platform: "twitter",
-      content: "Which new product would you like to see next? Let us know in the comments! #CustomerFeedback",
-      mediaUrl: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1770&q=80",
-      status: "scheduled",
-      createdAt: new Date("2023-05-15"),
-      scheduledFor: new Date(new Date().getFullYear(), new Date().getMonth(), 28, 16, 0),
-    },
-  ];
+  // Fetch scheduled content from Supabase
+  useEffect(() => {
+    const fetchScheduledContent = async () => {
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('content')
+          .select('*')
+          .eq('status', 'scheduled')
+          .order('scheduled_for', { ascending: false });
+        
+        if (error) {
+          throw error;
+        }
+        
+        if (data && data.length > 0) {
+          // Transform the data to match our Content type
+          const transformedData: Content[] = data.map(item => ({
+            id: item.id,
+            type: item.type,
+            intent: item.intent,
+            platform: item.platform,
+            content: item.content,
+            mediaUrl: item.media_url,
+            status: item.status,
+            createdAt: new Date(item.created_at),
+            scheduledFor: item.scheduled_for ? new Date(item.scheduled_for) : undefined,
+            publishedAt: item.published_at ? new Date(item.published_at) : undefined,
+          }));
+          
+          setScheduledContent(transformedData);
+        } else {
+          setScheduledContent([]);
+        }
+      } catch (error) {
+        console.error("Error fetching scheduled content:", error);
+        toast({
+          title: "Error",
+          description: "Could not load scheduled content. Please try again later.",
+          variant: "destructive",
+        });
+        setScheduledContent([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchScheduledContent();
+    
+    // Set up real-time subscription for content updates
+    const channel = supabase
+      .channel('content_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'content', filter: `status=eq.scheduled` }, 
+        () => {
+          fetchScheduledContent();
+        }
+      )
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Filter content based on selected date and platform
-  const filteredContent = sampleContent.filter((content) => {
+  const filteredContent = scheduledContent.filter((content) => {
     if (!content.scheduledFor) return false;
     
     const contentDate = new Date(content.scheduledFor);
@@ -80,6 +101,11 @@ const ContentCalendar: React.FC = () => {
     
     return true;
   });
+
+  // Get dates that have scheduled content for calendar highlighting
+  const datesWithContent = scheduledContent
+    .filter(content => content.scheduledFor && (platform === "all" || content.platform === platform))
+    .map(content => new Date(content.scheduledFor!));
 
   const getMonthName = (date: Date) => {
     return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -183,9 +209,7 @@ const ContentCalendar: React.FC = () => {
                 onSelect={handleDateSelect}
                 className="rounded-md border"
                 modifiers={{
-                  booked: sampleContent
-                    .filter(content => content.scheduledFor && (platform === "all" || content.platform === platform))
-                    .map(content => new Date(content.scheduledFor!)),
+                  booked: datesWithContent,
                 }}
                 modifiersStyles={{
                   booked: {
@@ -238,21 +262,25 @@ const ContentCalendar: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {sampleContent
-                .filter(content => content.scheduledFor && content.scheduledFor > new Date())
-                .sort((a, b) => (a.scheduledFor?.getTime() || 0) - (b.scheduledFor?.getTime() || 0))
-                .slice(0, 3)
-                .map((content) => (
-                  <div key={content.id} className="flex items-start space-x-3 p-3 rounded-lg hover:bg-muted/50 transition-colors">
-                    <div className={`w-2 h-2 mt-2 rounded-full ${content.platform === "instagram" ? "bg-pink-500" : "bg-blue-500"}`} />
-                    <div>
-                      <div className="text-sm font-medium">{content.content.substring(0, 60)}...</div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {content.scheduledFor?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {formatTime(content.scheduledFor!)}
+              {isLoading ? (
+                <div className="text-center py-4 text-muted-foreground">Loading scheduled content...</div>
+              ) : scheduledContent.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground">No upcoming scheduled content</div>
+              ) : (
+                scheduledContent
+                  .slice(0, 3)
+                  .map((content) => (
+                    <div key={content.id} className="flex items-start space-x-3 p-3 rounded-lg hover:bg-muted/50 transition-colors">
+                      <div className={`w-2 h-2 mt-2 rounded-full ${content.platform === "instagram" ? "bg-pink-500" : "bg-blue-500"}`} />
+                      <div>
+                        <div className="text-sm font-medium">{content.content.substring(0, 60)}...</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {content.scheduledFor?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {formatTime(content.scheduledFor!)}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+              )}
             </div>
           </CardContent>
         </Card>
