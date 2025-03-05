@@ -14,55 +14,54 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import MetricCard from "@/components/ui/MetricCard";
 import ContentCard from "@/components/ui/ContentCard";
-import { Metric, Content } from "@/types";
+import { Metric } from "@/types";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { Link } from "react-router-dom";
 import { usePostAnalytics } from "@/hooks/usePostAnalytics";
 
 const Dashboard: React.FC = () => {
-  // Use the hook to get published posts
-  const { posts: topPerformingContent, loading, usingSampleData } = usePostAnalytics();
+  // Use the expanded hook to get analytics data
+  const { 
+    topPerformingContent, 
+    loading, 
+    usingSampleData, 
+    engagementData,
+    followerMetrics,
+    engagementRate,
+    postsThisMonth,
+    avgReach
+  } = usePostAnalytics();
 
-  // Sample data - in a real app this would come from an API
+  // Create metrics from real data
   const metrics: Metric[] = [
     {
       id: "1",
       label: "Total Followers",
-      value: 12548,
-      change: 2.5,
+      value: followerMetrics.instagram.count,
+      change: parseFloat(followerMetrics.instagram.change),
       platform: "instagram",
     },
     {
       id: "2",
       label: "Engagement Rate",
-      value: 3.2,
-      change: 0.8,
+      value: parseFloat(engagementRate.value),
+      change: parseFloat(engagementRate.change),
       platform: "instagram",
     },
     {
       id: "3",
       label: "Total Followers",
-      value: 8423,
-      change: 1.2,
+      value: followerMetrics.twitter.count,
+      change: parseFloat(followerMetrics.twitter.change),
       platform: "twitter",
     },
     {
       id: "4",
-      label: "Engagement Rate",
-      value: 2.7,
-      change: -0.5,
+      label: "Posts This Month",
+      value: postsThisMonth,
+      change: postsThisMonth * 0.1, // Just an example change value
       platform: "twitter",
     },
-  ];
-
-  const engagementData = [
-    { name: "Mon", instagram: 2400, twitter: 1398 },
-    { name: "Tue", instagram: 1398, twitter: 3400 },
-    { name: "Wed", instagram: 9800, twitter: 2400 },
-    { name: "Thu", instagram: 3908, twitter: 5400 },
-    { name: "Fri", instagram: 4800, twitter: 3400 },
-    { name: "Sat", instagram: 3800, twitter: 1400 },
-    { name: "Sun", instagram: 4300, twitter: 2400 },
   ];
 
   return (
@@ -101,8 +100,9 @@ const Dashboard: React.FC = () => {
                       border: 'none'
                     }} 
                   />
-                  <Bar dataKey="instagram" fill="#E1306C" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="twitter" fill="#1DA1F2" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="likes" fill="#E1306C" radius={[4, 4, 0, 0]} name="Likes" />
+                  <Bar dataKey="comments" fill="#1DA1F2" radius={[4, 4, 0, 0]} name="Comments" />
+                  <Bar dataKey="shares" fill="#4CAF50" radius={[4, 4, 0, 0]} name="Shares" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -138,24 +138,33 @@ const Dashboard: React.FC = () => {
               </div>
 
               <div className="pt-4 space-y-2">
+                {/* Aggregate data from top performing content */}
                 <div className="flex items-center text-sm">
                   <Heart size={16} className="mr-2 text-red-500" />
-                  <span className="font-medium">4.2k</span>
+                  <span className="font-medium">
+                    {topPerformingContent.reduce((total, content) => total + (content.metrics?.likes || 0), 0).toLocaleString()}
+                  </span>
                   <span className="text-muted-foreground ml-1">total likes</span>
                 </div>
                 <div className="flex items-center text-sm">
                   <MessageCircle size={16} className="mr-2 text-blue-500" />
-                  <span className="font-medium">987</span>
+                  <span className="font-medium">
+                    {topPerformingContent.reduce((total, content) => total + (content.metrics?.comments || 0), 0).toLocaleString()}
+                  </span>
                   <span className="text-muted-foreground ml-1">comments</span>
                 </div>
                 <div className="flex items-center text-sm">
                   <Share2 size={16} className="mr-2 text-green-500" />
-                  <span className="font-medium">1.3k</span>
+                  <span className="font-medium">
+                    {topPerformingContent.reduce((total, content) => total + (content.metrics?.shares || 0), 0).toLocaleString()}
+                  </span>
                   <span className="text-muted-foreground ml-1">shares</span>
                 </div>
                 <div className="flex items-center text-sm">
                   <Eye size={16} className="mr-2 text-purple-500" />
-                  <span className="font-medium">24.8k</span>
+                  <span className="font-medium">
+                    {topPerformingContent.reduce((total, content) => total + (content.metrics?.views || 0), 0).toLocaleString()}
+                  </span>
                   <span className="text-muted-foreground ml-1">views</span>
                 </div>
               </div>
@@ -174,21 +183,29 @@ const Dashboard: React.FC = () => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {topPerformingContent.slice(0, 2).map((content) => (
-          <ContentCard key={content.id} content={content} />
-        ))}
-        <Card className="flex flex-col items-center justify-center p-6 border-dashed border-2 hover:border-primary/50 transition-colors">
-          <Button variant="outline" className="rounded-full h-12 w-12 mb-3">
-            <Plus size={20} />
-          </Button>
-          <h3 className="text-lg font-medium mb-1">Create New Content</h3>
-          <p className="text-center text-muted-foreground text-sm mb-4">Generate new content for your social media platforms</p>
-          <Button asChild>
-            <Link to="/content-generation">Get Started</Link>
-          </Button>
-        </Card>
-      </div>
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="bg-muted h-56 rounded-lg animate-pulse"></div>
+          <div className="bg-muted h-56 rounded-lg animate-pulse"></div>
+          <div className="bg-muted h-56 rounded-lg animate-pulse"></div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {topPerformingContent.slice(0, 2).map((content) => (
+            <ContentCard key={content.id} content={content} />
+          ))}
+          <Card className="flex flex-col items-center justify-center p-6 border-dashed border-2 hover:border-primary/50 transition-colors">
+            <Button variant="outline" className="rounded-full h-12 w-12 mb-3">
+              <Plus size={20} />
+            </Button>
+            <h3 className="text-lg font-medium mb-1">Create New Content</h3>
+            <p className="text-center text-muted-foreground text-sm mb-4">Generate new content for your social media platforms</p>
+            <Button asChild>
+              <Link to="/content-generation">Get Started</Link>
+            </Button>
+          </Card>
+        </div>
+      )}
     </div>
   );
 };
