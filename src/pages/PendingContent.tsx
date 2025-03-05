@@ -1,74 +1,108 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Clock, Filter, Plus, Calendar as CalendarIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import ContentCard from "@/components/ui/ContentCard";
-import { Content, SocialPlatform, ContentType } from "@/types";
+import { Content, SocialPlatform, ContentType, ContentStatus } from "@/types";
 import { toast } from "@/hooks/use-toast";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { useNavigate } from "react-router-dom";
+import { format } from "date-fns";
 
 const PendingContent: React.FC = () => {
-  const [status, setStatus] = useState<"all" | "draft" | "scheduled">("all");
+  const [status, setStatus] = useState<"all" | ContentStatus>("all");
   const [platform, setPlatform] = useState<"all" | SocialPlatform>("all");
   const [type, setType] = useState<"all" | ContentType>("all");
   const [date, setDate] = useState<Date | undefined>(undefined);
+  const [content, setContent] = useState<Content[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
-  // Sample data - in a real app this would come from an API
-  const sampleContent: Content[] = [
-    {
-      id: "1",
-      type: "image",
-      intent: "promotional",
-      platform: "instagram",
-      content: "Summer vibes! Our new collection is perfect for those sunny days. #SummerFashion #NewCollection",
-      mediaUrl: "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1770&q=80",
-      status: "draft",
-      createdAt: new Date("2023-06-15"),
-    },
-    {
-      id: "2",
-      type: "text",
-      intent: "news",
-      platform: "twitter",
-      content: "We're thrilled to announce our new partnership with @brandname! Stay tuned for exciting collaborations.",
-      status: "draft",
-      createdAt: new Date("2023-06-10"),
-    },
-    {
-      id: "3",
-      type: "video",
-      intent: "feature",
-      platform: "instagram",
-      content: "Check out the new features we just added to our app! Now you can organize your content even better.",
-      mediaUrl: "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1674&q=80",
-      status: "scheduled",
-      createdAt: new Date("2023-06-08"),
-      scheduledFor: new Date("2023-07-01"),
-    },
-    {
-      id: "4",
-      type: "image",
-      intent: "poll",
-      platform: "twitter",
-      content: "Which new product would you like to see next? Let us know in the comments! #CustomerFeedback",
-      mediaUrl: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1770&q=80",
-      status: "scheduled",
-      createdAt: new Date("2023-06-05"),
-      scheduledFor: new Date("2023-06-25"),
-    },
-  ];
+  useEffect(() => {
+    if (!user) {
+      toast({
+        title: "Authentication required",
+        description: "You need to be logged in to view your content.",
+        variant: "destructive",
+      });
+      navigate('/auth');
+      return;
+    }
+    
+    fetchContent();
+  }, [user]);
+
+  const fetchContent = async () => {
+    setIsLoading(true);
+    
+    try {
+      // First get the user's ID from the users table
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_id', user?.id)
+        .single();
+      
+      if (userError) {
+        console.error("Error fetching user data:", userError);
+        throw userError;
+      }
+      
+      // Then fetch content for that user
+      const { data, error } = await supabase
+        .from('content')
+        .select('*')
+        .eq('user_id', userData.id)
+        .in('status', ['draft', 'scheduled'])
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error("Error fetching content:", error);
+        throw error;
+      }
+      
+      // Transform the data to match our Content type
+      const transformedContent: Content[] = data.map(item => ({
+        id: item.id,
+        type: item.type as ContentType,
+        intent: item.intent,
+        platform: item.platform,
+        content: item.content,
+        mediaUrl: item.media_url,
+        status: item.status as ContentStatus,
+        createdAt: new Date(item.created_at),
+        scheduledFor: item.scheduled_for ? new Date(item.scheduled_for) : undefined,
+        publishedAt: item.published_at ? new Date(item.published_at) : undefined
+      }));
+      
+      setContent(transformedContent);
+    } catch (error) {
+      console.error("Failed to fetch content:", error);
+      toast({
+        title: "Failed to load content",
+        description: "There was an error loading your content. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Filter content based on selected filters
-  const filteredContent = sampleContent.filter((content) => {
-    if (status !== "all" && content.status !== status) return false;
-    if (platform !== "all" && content.platform !== platform) return false;
-    if (type !== "all" && content.type !== type) return false;
-    if (date && content.scheduledFor) {
-      const contentDate = new Date(content.scheduledFor);
+  const filteredContent = content.filter((item) => {
+    if (status !== "all" && item.status !== status) return false;
+    if (platform !== "all" && item.platform !== platform) return false;
+    if (type !== "all" && item.type !== type) return false;
+    if (date && item.scheduledFor) {
+      const contentDate = new Date(item.scheduledFor);
       if (
         contentDate.getDate() !== date.getDate() ||
         contentDate.getMonth() !== date.getMonth() ||
@@ -80,28 +114,58 @@ const PendingContent: React.FC = () => {
     return true;
   });
 
-  const handleSchedule = (content: Content) => {
-    // In a real app, this would open a date picker and then call an API
-    toast({
-      title: "Content scheduled",
-      description: "Your content has been scheduled for posting.",
-    });
+  const handleSchedule = async (content: Content) => {
+    navigate(`/content-generation?id=${content.id}`);
   };
 
-  const handlePublish = (content: Content) => {
-    // In a real app, this would call an API to publish the content
-    toast({
-      title: "Content published",
-      description: "Your content has been published successfully.",
-    });
+  const handlePublish = async (content: Content) => {
+    try {
+      // First get the user's ID from the users table
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_id', user?.id)
+        .single();
+      
+      if (userError) {
+        console.error("Error fetching user data:", userError);
+        throw userError;
+      }
+      
+      // Update the content status to published
+      const { error } = await supabase
+        .from('content')
+        .update({
+          status: 'published',
+          published_at: new Date().toISOString()
+        })
+        .eq('id', content.id)
+        .eq('user_id', userData.id);
+      
+      if (error) {
+        console.error("Error publishing content:", error);
+        throw error;
+      }
+      
+      toast({
+        title: "Content published",
+        description: "Your content has been published successfully.",
+      });
+      
+      // Refresh the content list
+      fetchContent();
+    } catch (error) {
+      console.error("Failed to publish content:", error);
+      toast({
+        title: "Publishing failed",
+        description: "There was an error publishing your content. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
+    return format(date, "PPP");
   };
 
   return (
@@ -236,7 +300,11 @@ const PendingContent: React.FC = () => {
           </div>
 
           <TabsContent value="all" className="mt-0">
-            {filteredContent.length === 0 ? (
+            {isLoading ? (
+              <div className="flex justify-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+              </div>
+            ) : filteredContent.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-10">
                   <Clock size={48} className="text-muted-foreground mb-4" />
@@ -264,7 +332,11 @@ const PendingContent: React.FC = () => {
           </TabsContent>
 
           <TabsContent value="draft" className="mt-0">
-            {filteredContent.length === 0 ? (
+            {isLoading ? (
+              <div className="flex justify-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+              </div>
+            ) : filteredContent.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-10">
                   <Clock size={48} className="text-muted-foreground mb-4" />
@@ -292,7 +364,11 @@ const PendingContent: React.FC = () => {
           </TabsContent>
 
           <TabsContent value="scheduled" className="mt-0">
-            {filteredContent.length === 0 ? (
+            {isLoading ? (
+              <div className="flex justify-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+              </div>
+            ) : filteredContent.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-10">
                   <Clock size={48} className="text-muted-foreground mb-4" />

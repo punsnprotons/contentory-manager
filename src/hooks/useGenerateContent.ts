@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { ContentType, ContentIntent, SocialPlatform } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
@@ -104,6 +105,12 @@ export const useGenerateContent = () => {
         throw userError;
       }
       
+      // Set the appropriate timestamps based on status
+      let publishedAt = null;
+      if (params.status === 'published') {
+        publishedAt = new Date().toISOString();
+      }
+      
       const { data, error } = await supabase
         .from('content')
         .insert({
@@ -114,7 +121,7 @@ export const useGenerateContent = () => {
           intent: params.intent,
           status: params.status,
           scheduled_for: params.scheduledFor ? params.scheduledFor.toISOString() : null,
-          published_at: params.status === 'published' ? new Date().toISOString() : null,
+          published_at: publishedAt,
           user_id: userData.id
         })
         .select()
@@ -123,6 +130,34 @@ export const useGenerateContent = () => {
       if (error) {
         console.error("Database error:", error);
         throw error;
+      }
+      
+      // If status is scheduled, create a notification
+      if (params.status === 'scheduled' && params.scheduledFor) {
+        // Get formatted date for the notification
+        const formattedDate = params.scheduledFor.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        
+        // Add a notification
+        const { error: notificationError } = await supabase
+          .from('notifications')
+          .insert({
+            user_id: userData.id,
+            type: 'info',
+            message: `Content scheduled for ${formattedDate}`,
+            related_content_id: data.id,
+            read: false
+          });
+          
+        if (notificationError) {
+          console.error("Error creating notification:", notificationError);
+          // We don't throw here to not stop the content flow
+        }
       }
       
       return data.id;
@@ -135,17 +170,53 @@ export const useGenerateContent = () => {
     setIsSaving(true);
     
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error("You must be logged in to publish content");
+      }
+      
+      await ensureUserExists(user.id, user.email || '');
+      
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_id', user.id)
+        .single();
+      
+      if (userError) {
+        console.error("Error fetching user ID:", userError);
+        throw userError;
+      }
+      
       const { error } = await supabase
         .from('content')
         .update({
           status: 'published',
           published_at: new Date().toISOString()
         })
-        .eq('id', contentId);
+        .eq('id', contentId)
+        .eq('user_id', userData.id);
       
       if (error) {
         console.error("Database error when publishing:", error);
         throw error;
+      }
+      
+      // Add a notification
+      const { error: notificationError } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: userData.id,
+          type: 'success',
+          message: 'Your content has been published successfully',
+          related_content_id: contentId,
+          read: false
+        });
+        
+      if (notificationError) {
+        console.error("Error creating notification:", notificationError);
+        // We don't throw here to not stop the content flow
       }
     } finally {
       setIsSaving(false);
@@ -156,17 +227,62 @@ export const useGenerateContent = () => {
     setIsSaving(true);
     
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error("You must be logged in to schedule content");
+      }
+      
+      await ensureUserExists(user.id, user.email || '');
+      
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_id', user.id)
+        .single();
+      
+      if (userError) {
+        console.error("Error fetching user ID:", userError);
+        throw userError;
+      }
+      
       const { error } = await supabase
         .from('content')
         .update({
           status: 'scheduled',
           scheduled_for: scheduledDate.toISOString()
         })
-        .eq('id', contentId);
+        .eq('id', contentId)
+        .eq('user_id', userData.id);
       
       if (error) {
         console.error("Database error when scheduling:", error);
         throw error;
+      }
+      
+      // Get formatted date for the notification
+      const formattedDate = scheduledDate.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
+      // Add a notification
+      const { error: notificationError } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: userData.id,
+          type: 'info',
+          message: `Content scheduled for ${formattedDate}`,
+          related_content_id: contentId,
+          read: false
+        });
+        
+      if (notificationError) {
+        console.error("Error creating notification:", notificationError);
+        // We don't throw here to not stop the content flow
       }
     } finally {
       setIsSaving(false);
