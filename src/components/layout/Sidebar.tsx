@@ -50,7 +50,7 @@ const SidebarComponent: React.FC = () => {
       </SidebarHeader>
       <SidebarContent className="p-4">
         <nav className="space-y-2">
-          <SidebarLink to="/" icon={LayoutDashboard} label="Dashboard" />
+          <SidebarLink to="/dashboard" icon={LayoutDashboard} label="Dashboard" />
           <SidebarLink to="/content-generation" icon={Edit} label="Create Content" />
           <SidebarLink to="/pending-content" icon={Clock} label="Pending Content" />
           <SidebarLink to="/content-calendar" icon={Calendar} label="Content Calendar" />

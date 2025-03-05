@@ -9,6 +9,7 @@ import { toast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import ContentCard from "@/components/ui/ContentCard";
+import { Link } from "react-router-dom";
 
 const ContentCalendar: React.FC = () => {
   const [date, setDate] = useState<Date>(new Date());
@@ -132,10 +133,10 @@ const ContentCalendar: React.FC = () => {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Content Calendar</h1>
         <Button asChild>
-          <a href="/content-generation" className="flex items-center">
+          <Link to="/content-generation" className="flex items-center">
             <Plus size={16} className="mr-1" />
             <span>Create New</span>
-          </a>
+          </Link>
         </Button>
       </div>
 
@@ -174,7 +175,7 @@ const ContentCalendar: React.FC = () => {
           </div>
         </CardHeader>
         <CardContent>
-          <TabsContent value="month" className="mt-0">
+          {view === "month" ? (
             <div className="flex justify-center">
               <Calendar
                 mode="single"
@@ -196,36 +197,37 @@ const ContentCalendar: React.FC = () => {
                 }}
               />
             </div>
-          </TabsContent>
-          <TabsContent value="day" className="mt-0">
-            {filteredContent.length === 0 ? (
-              <div className="text-center py-12">
-                <CalendarIcon size={48} className="mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-xl font-medium mb-2">No Content Scheduled</h3>
-                <p className="text-muted-foreground mb-4">
-                  There's no content scheduled for this day.
-                </p>
-                <Button asChild>
-                  <a href="/content-generation">Schedule Content</a>
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {filteredContent
-                  .sort((a, b) => (a.scheduledFor?.getTime() || 0) - (b.scheduledFor?.getTime() || 0))
-                  .map((content) => (
-                    <div key={content.id} className="flex">
-                      <div className="w-24 flex-shrink-0 pr-4 pt-4">
-                        <div className="text-sm font-medium">{formatTime(content.scheduledFor!)}</div>
+          ) : (
+            <div>
+              {filteredContent.length === 0 ? (
+                <div className="text-center py-12">
+                  <CalendarIcon size={48} className="mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-xl font-medium mb-2">No Content Scheduled</h3>
+                  <p className="text-muted-foreground mb-4">
+                    There's no content scheduled for this day.
+                  </p>
+                  <Button asChild>
+                    <Link to="/content-generation">Schedule Content</Link>
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {filteredContent
+                    .sort((a, b) => (a.scheduledFor?.getTime() || 0) - (b.scheduledFor?.getTime() || 0))
+                    .map((content) => (
+                      <div key={content.id} className="flex">
+                        <div className="w-24 flex-shrink-0 pr-4 pt-4">
+                          <div className="text-sm font-medium">{formatTime(content.scheduledFor!)}</div>
+                        </div>
+                        <div className="flex-grow">
+                          <ContentCard content={content} />
+                        </div>
                       </div>
-                      <div className="flex-grow">
-                        <ContentCard content={content} />
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </TabsContent>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 

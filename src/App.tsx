@@ -9,6 +9,9 @@ import Dashboard from "./pages/Dashboard";
 import ContentGeneration from "./pages/ContentGeneration";
 import PendingContent from "./pages/PendingContent";
 import ContentCalendar from "./pages/ContentCalendar";
+import Analytics from "./pages/Analytics";
+import AIAssistant from "./pages/AIAssistant";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +29,9 @@ const App = () => (
             <Route path="content-generation" element={<ContentGeneration />} />
             <Route path="pending-content" element={<PendingContent />} />
             <Route path="content-calendar" element={<ContentCalendar />} />
+            <Route path="analytics" element={<Analytics />} />
+            <Route path="chat" element={<AIAssistant />} />
+            <Route path="settings" element={<Settings />} />
           </Route>
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
