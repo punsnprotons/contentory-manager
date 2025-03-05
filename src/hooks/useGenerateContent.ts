@@ -62,6 +62,8 @@ export const useGenerateContent = () => {
         throw new Error("You must be logged in to save content");
       }
       
+      console.log("Saving content with user ID:", user.id);
+      
       // Insert content into the database
       const { data, error } = await supabase
         .from('content')
@@ -80,6 +82,7 @@ export const useGenerateContent = () => {
         .single();
       
       if (error) {
+        console.error("Database error:", error);
         throw error;
       }
       
@@ -102,6 +105,7 @@ export const useGenerateContent = () => {
         .eq('id', contentId);
       
       if (error) {
+        console.error("Database error when publishing:", error);
         throw error;
       }
     } finally {
@@ -122,6 +126,7 @@ export const useGenerateContent = () => {
         .eq('id', contentId);
       
       if (error) {
+        console.error("Database error when scheduling:", error);
         throw error;
       }
     } finally {

@@ -1,5 +1,4 @@
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Sparkles, LayoutGrid, Image, Video, AlignLeft, Send, RotateCw, Save } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +12,7 @@ import { useGenerateContent } from "@/hooks/useGenerateContent";
 import ScheduleDialog from "@/components/ui/ScheduleDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 
 const ContentGeneration: React.FC = () => {
   const [selectedContentType, setSelectedContentType] = useState<ContentType>("text");
@@ -25,6 +25,7 @@ const ContentGeneration: React.FC = () => {
   const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false);
   
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { generateContent, saveContent, publishContent, scheduleContent, isGenerating, isSaving } = useGenerateContent();
 
   const contentTypes: { value: ContentType; label: string; icon: React.ReactNode }[] = [
@@ -33,15 +34,14 @@ const ContentGeneration: React.FC = () => {
     { value: "video", label: "Video Post", icon: <Video size={18} /> },
   ];
 
-  // Check if user is authenticated
   const checkAuth = async () => {
-    const { data } = await supabase.auth.getUser();
-    if (!data.user) {
+    if (!user) {
       toast({
         title: "Authentication required",
         description: "You need to be logged in to save or publish content.",
         variant: "destructive",
       });
+      navigate('/auth');
       return false;
     }
     return true;
@@ -116,7 +116,8 @@ const ContentGeneration: React.FC = () => {
     if (!generatedContent || !await checkAuth()) return;
     
     try {
-      // If content hasn't been saved yet, save it first as published
+      console.log("Publishing content with user:", user?.id);
+      
       if (!contentId) {
         const id = await saveContent({
           content: generatedContent,
@@ -128,7 +129,6 @@ const ContentGeneration: React.FC = () => {
         });
         setContentId(id);
       } else {
-        // If already saved, update its status to published
         await publishContent(contentId);
       }
       
@@ -137,7 +137,6 @@ const ContentGeneration: React.FC = () => {
         description: "Your content has been successfully published!",
       });
       
-      // Redirect to the pending content page after publishing
       navigate("/pending-content");
     } catch (error) {
       console.error("Error publishing content:", error);
@@ -158,7 +157,6 @@ const ContentGeneration: React.FC = () => {
     if (!generatedContent || !await checkAuth()) return;
     
     try {
-      // If content hasn't been saved yet, save it first as scheduled
       if (!contentId) {
         const id = await saveContent({
           content: generatedContent,
@@ -171,7 +169,6 @@ const ContentGeneration: React.FC = () => {
         });
         setContentId(id);
       } else {
-        // If already saved, update its status to scheduled
         await scheduleContent(contentId, scheduledDate);
       }
       
@@ -182,7 +179,6 @@ const ContentGeneration: React.FC = () => {
         description: `Your content has been scheduled for ${scheduledDate.toLocaleString()}.`,
       });
       
-      // Redirect to the calendar page after scheduling
       navigate("/content-calendar");
     } catch (error) {
       console.error("Error scheduling content:", error);
