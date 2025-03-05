@@ -1,5 +1,5 @@
 
-import React from "react";
+import React, { useEffect } from "react";
 import {
   BarChart as BarChartIcon,
   Heart,
@@ -30,8 +30,14 @@ const Dashboard: React.FC = () => {
     engagementRate,
     postsThisMonth,
     avgReach,
-    platformDistribution
+    platformDistribution,
+    refreshData
   } = usePostAnalytics();
+
+  // Force a refresh of data when component mounts to ensure we have the latest data
+  useEffect(() => {
+    refreshData();
+  }, []);
 
   // Create metrics from real data
   const metrics: Metric[] = [
@@ -203,7 +209,7 @@ const Dashboard: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {topPerformingContent && topPerformingContent.length > 0 ? (
-            // Render actual content cards when we have top performing content
+            // Only render the first two items from topPerformingContent
             topPerformingContent.slice(0, 2).map((content) => (
               <ContentCard key={content.id} content={content} />
             ))

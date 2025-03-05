@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Clock, Filter, Plus, Calendar as CalendarIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -92,6 +93,32 @@ const PendingContent: React.FC = () => {
         throw error;
       }
       
+      // Fetch metrics for the content
+      const contentIds = data.map(item => item.id);
+      let metricsData = {};
+      
+      if (contentIds.length > 0) {
+        const { data: metrics, error: metricsError } = await supabase
+          .from('content_metrics')
+          .select('*')
+          .in('content_id', contentIds);
+          
+        if (metricsError) {
+          console.error("Error fetching metrics:", metricsError);
+        } else if (metrics) {
+          // Create a lookup map for metrics by content_id
+          metricsData = metrics.reduce((acc, metric) => {
+            acc[metric.content_id] = {
+              likes: metric.likes || 0,
+              comments: metric.comments || 0,
+              shares: metric.shares || 0,
+              views: metric.views || 0,
+            };
+            return acc;
+          }, {});
+        }
+      }
+      
       // Transform the data to match our Content type
       const transformedContent: Content[] = data.map(item => ({
         id: item.id,
@@ -104,12 +131,12 @@ const PendingContent: React.FC = () => {
         createdAt: new Date(item.created_at),
         scheduledFor: item.scheduled_for ? new Date(item.scheduled_for) : undefined,
         publishedAt: item.published_at ? new Date(item.published_at) : undefined,
-        metrics: item.metrics ? {
-          likes: item.metrics.likes || 0,
-          comments: item.metrics.comments || 0,
-          shares: item.metrics.shares || 0,
-          views: item.metrics.views || 0
-        } : undefined
+        metrics: metricsData[item.id] || {
+          likes: 0,
+          comments: 0,
+          shares: 0,
+          views: 0
+        }
       }));
       
       setContent(transformedContent);
