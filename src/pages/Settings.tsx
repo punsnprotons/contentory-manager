@@ -1,6 +1,5 @@
-
 import React, { useEffect, useState } from "react";
-import { Bell, FileText, Globe, Lock, Mail, User, X, Check, Plus } from "lucide-react";
+import { Bell, FileText, Globe, Lock, Mail, User, X, Check, Plus, Twitter } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { Loader2 } from "lucide-react";
 
 interface UserSettings {
   id: string;
@@ -34,6 +34,16 @@ interface PlatformConnection {
   connected: boolean;
 }
 
+interface TwitterVerificationResult {
+  verified: boolean;
+  user?: {
+    id: string;
+    name: string;
+    username: string;
+  };
+  message: string;
+}
+
 const Settings: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
@@ -50,11 +60,11 @@ const Settings: React.FC = () => {
     new: '',
     confirm: ''
   });
+  const [isVerifyingTwitter, setIsVerifyingTwitter] = useState(false);
 
   useEffect(() => {
     async function fetchUserData() {
       try {
-        // Fetch user settings
         const { data: settingsData, error: settingsError } = await supabase
           .from('user_settings')
           .select('*')
@@ -71,7 +81,6 @@ const Settings: React.FC = () => {
           setUserSettings(settingsData);
         }
 
-        // Fetch user profile
         const { data: profileData, error: profileError } = await supabase
           .from('users')
           .select('*')
@@ -89,7 +98,6 @@ const Settings: React.FC = () => {
           });
         }
 
-        // Fetch platform connections
         const { data: connectionsData, error: connectionsError } = await supabase
           .from('platform_connections')
           .select('*');
@@ -156,13 +164,11 @@ const Settings: React.FC = () => {
       return;
     }
 
-    // In a real app, we would update the password through Supabase auth
     toast({
       title: "Password changed",
       description: "Your password has been updated successfully."
     });
     
-    // Reset form
     setPasswordForm({
       current: '',
       new: '',
@@ -186,7 +192,6 @@ const Settings: React.FC = () => {
         throw error;
       }
 
-      // Update local state
       setUserSettings(prev => prev ? { ...prev, ...updates } : null);
 
       toast({
@@ -214,7 +219,6 @@ const Settings: React.FC = () => {
         throw error;
       }
 
-      // Update local state
       setConnections(prev => 
         prev.map(conn => conn.id === id ? { ...conn, connected: false } : conn)
       );
@@ -234,7 +238,6 @@ const Settings: React.FC = () => {
   };
 
   const handleToggleSecuritySetting = async (setting: string, value: boolean) => {
-    // In a real app, we would update security settings through Supabase
     toast({
       title: "Security setting updated",
       description: `The ${setting} setting has been ${value ? 'enabled' : 'disabled'}.`
@@ -246,6 +249,94 @@ const Settings: React.FC = () => {
       title: "Settings saved",
       description: "Your settings have been updated successfully.",
     });
+  };
+
+  const verifyTwitterCredentials = async () => {
+    setIsVerifyingTwitter(true);
+    try {
+      const response = await supabase.functions.invoke('twitter-integration', {
+        method: 'GET',
+        path: 'verify',
+      });
+      
+      const result = response.data as TwitterVerificationResult;
+      
+      if (result.verified && result.user) {
+        const { error } = await supabase
+          .from('platform_connections')
+          .upsert({
+            platform: 'twitter',
+            username: result.user.username,
+            connected: true,
+            user_id: userProfile?.id
+          }, {
+            onConflict: 'user_id, platform'
+          });
+          
+        if (error) {
+          console.error('Error saving Twitter connection:', error);
+          toast({
+            title: "Connection Error",
+            description: "Failed to save Twitter connection. Please try again.",
+            variant: "destructive"
+          });
+        } else {
+          const { data: refreshedConnections } = await supabase
+            .from('platform_connections')
+            .select('*');
+            
+          if (refreshedConnections) {
+            setConnections(refreshedConnections);
+          }
+          
+          toast({
+            title: "Twitter Connected",
+            description: `Successfully connected to Twitter as @${result.user.username}`,
+          });
+        }
+      } else {
+        toast({
+          title: "Verification Failed",
+          description: result.message || "Could not verify Twitter credentials",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error verifying Twitter credentials:', error);
+      toast({
+        title: "Verification Error",
+        description: "An error occurred while verifying Twitter credentials. Check console for details.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsVerifyingTwitter(false);
+    }
+  };
+
+  const handleTestTweet = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('twitter-integration', {
+        method: 'POST',
+        path: 'tweet',
+        body: { text: "This is a test tweet from Wubble AI!" }
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
+      toast({
+        title: "Tweet Sent",
+        description: "Test tweet was sent successfully!",
+      });
+    } catch (error) {
+      console.error('Error sending test tweet:', error);
+      toast({
+        title: "Tweet Failed",
+        description: "Failed to send test tweet. Check console for details.",
+        variant: "destructive"
+      });
+    }
   };
 
   if (isLoading) {
@@ -433,10 +524,60 @@ const Settings: React.FC = () => {
                 <div className="text-center py-4 text-muted-foreground">No connected accounts found.</div>
               )}
               
-              <Button className="w-full" variant="outline">
-                <Plus className="h-4 w-4 mr-2" />
-                Connect New Account
-              </Button>
+              <div className="space-y-6 pt-4">
+                <Card className="border-dashed">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center">
+                      <Twitter className="h-5 w-5 mr-2 text-blue-500" />
+                      Twitter Integration
+                    </CardTitle>
+                    <CardDescription>
+                      Connect your Twitter account to publish content directly.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="rounded-md bg-slate-50 p-4 dark:bg-slate-900">
+                      <p className="text-sm">
+                        Twitter API access is configured through your application's backend.
+                        Credentials are stored securely and used to publish content on your behalf.
+                      </p>
+                    </div>
+                    
+                    <div className="flex space-x-2">
+                      <Button 
+                        onClick={verifyTwitterCredentials} 
+                        disabled={isVerifyingTwitter}
+                        className="flex-1"
+                      >
+                        {isVerifyingTwitter ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Verifying...
+                          </>
+                        ) : (
+                          <>
+                            <Check className="mr-2 h-4 w-4" />
+                            Verify Connection
+                          </>
+                        )}
+                      </Button>
+                      
+                      <Button 
+                        onClick={handleTestTweet}
+                        variant="outline"
+                        className="flex-1"
+                      >
+                        Send Test Tweet
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Button className="w-full" variant="outline">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Connect Other Account
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
