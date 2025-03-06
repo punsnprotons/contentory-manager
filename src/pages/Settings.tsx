@@ -66,6 +66,7 @@ const Settings: React.FC = () => {
   const [isVerifyingTwitter, setIsVerifyingTwitter] = useState(false);
   const [isConnectingTwitter, setIsConnectingTwitter] = useState(false);
   const [twitterService, setTwitterService] = useState<TwitterApiService | null>(null);
+  const [isVerifyingInitialization, setIsVerifyingInitialization] = useState(false);
 
   useEffect(() => {
     async function loadTwitterService() {
@@ -432,6 +433,45 @@ const Settings: React.FC = () => {
     }
   };
 
+  const verifyServiceInitialization = async () => {
+    if (!userProfile?.id) {
+      toast({
+        title: "User Profile Missing",
+        description: "Cannot verify service initialization without a user profile.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setIsVerifyingInitialization(true);
+    try {
+      console.log("Testing TwitterApiService initialization with userId:", userProfile.id);
+      const result = await TwitterApiService.verifyServiceInitialization(userProfile.id);
+      
+      if (result.success) {
+        toast({
+          title: "Service Initialization Successful",
+          description: result.message,
+        });
+      } else {
+        toast({
+          title: "Service Initialization Failed",
+          description: result.message,
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error testing service initialization:', error);
+      toast({
+        title: "Verification Error",
+        description: error instanceof Error ? error.message : "An error occurred while verifying service initialization.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsVerifyingInitialization(false);
+    }
+  };
+
   if (isLoading) {
     return <div className="container-page flex items-center justify-center min-h-[50vh]">
       <div className="text-xl font-medium">Loading settings...</div>
@@ -636,52 +676,75 @@ const Settings: React.FC = () => {
                       </p>
                     </div>
                     
-                    <div className="flex space-x-2">
-                      <Button 
-                        onClick={verifyTwitterCredentials} 
-                        disabled={isVerifyingTwitter}
-                        className="flex-1"
-                      >
-                        {isVerifyingTwitter ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Verifying...
-                          </>
-                        ) : (
-                          <>
-                            <Check className="mr-2 h-4 w-4" />
-                            Verify Connection
-                          </>
-                        )}
-                      </Button>
+                    <div className="flex flex-col space-y-2">
+                      <div className="flex space-x-2">
+                        <Button 
+                          onClick={verifyTwitterCredentials} 
+                          disabled={isVerifyingTwitter}
+                          className="flex-1"
+                        >
+                          {isVerifyingTwitter ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Verifying...
+                            </>
+                          ) : (
+                            <>
+                              <Check className="mr-2 h-4 w-4" />
+                              Verify Connection
+                            </>
+                          )}
+                        </Button>
+                        
+                        <Button 
+                          onClick={initiateTwitterAuth}
+                          disabled={isConnectingTwitter}
+                          variant="outline"
+                          className="flex-1"
+                        >
+                          {isConnectingTwitter ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Connecting...
+                            </>
+                          ) : (
+                            <>
+                              <Twitter className="mr-2 h-4 w-4" />
+                              Connect with Twitter
+                            </>
+                          )}
+                        </Button>
+                      </div>
                       
-                      <Button 
-                        onClick={initiateTwitterAuth}
-                        disabled={isConnectingTwitter}
-                        variant="outline"
-                        className="flex-1"
-                      >
-                        {isConnectingTwitter ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Connecting...
-                          </>
-                        ) : (
-                          <>
-                            <Twitter className="mr-2 h-4 w-4" />
-                            Connect with Twitter
-                          </>
-                        )}
-                      </Button>
+                      <div className="flex space-x-2">
+                        <Button 
+                          onClick={handleTestTweet}
+                          variant="outline"
+                          className="flex-1"
+                        >
+                          Send Test Tweet
+                        </Button>
+                        
+                        <Button 
+                          onClick={verifyServiceInitialization}
+                          variant="outline"
+                          disabled={isVerifyingInitialization}
+                          className="flex-1"
+                        >
+                          {isVerifyingInitialization ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Testing Service...
+                            </>
+                          ) : (
+                            <>
+                              <Check className="mr-2 h-4 w-4" />
+                              Verify Service Init
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
-                    
-                    <Button 
-                      onClick={handleTestTweet}
-                      variant="outline"
-                      className="w-full"
-                    >
-                      Send Test Tweet
-                    </Button>
                   </CardContent>
                 </Card>
                 

@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 
@@ -141,6 +140,29 @@ export class TwitterApiService {
     } catch (error) {
       console.error('Error creating Twitter service:', error);
       return null;
+    }
+  }
+
+  /**
+   * Verify if the service can be initialized with the given user ID
+   */
+  static async verifyServiceInitialization(userId: string): Promise<{ success: boolean; message: string }> {
+    try {
+      console.log(`Attempting to initialize TwitterApiService with userId: ${userId}`);
+      const service = new TwitterApiService(userId);
+      await service.initialize();
+      console.log(`TwitterApiService successfully initialized for user: ${userId}`);
+      
+      return {
+        success: true,
+        message: `Twitter service successfully initialized with username: ${service.username}`
+      };
+    } catch (error) {
+      console.error('Error initializing TwitterApiService:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error initializing Twitter service'
+      };
     }
   }
 }
