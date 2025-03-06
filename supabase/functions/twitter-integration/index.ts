@@ -120,10 +120,10 @@ async function getRequestToken(callbackUrl: string): Promise<{ oauth_token: stri
   const requestTokenURL = 'https://api.twitter.com/oauth/request_token';
   const method = 'POST';
   
-  // Important: The callback URL must be included in the OAuth parameters
-  // but not in the body of the request
+  // Important: The callback URL must be properly formatted and NOT URL encoded in the oauth_callback parameter
+  // Twitter expects the callback URL to be passed as a parameter that gets encoded as part of the OAuth process
   const oauthParams: Record<string, string> = {
-    oauth_callback: encodeURIComponent(callbackUrl)
+    oauth_callback: callbackUrl
   };
   
   // Generate authorization header
@@ -363,6 +363,10 @@ async function verifyCredentials(): Promise<any> {
 // Initiate OAuth authentication flow with a specific callback URL
 async function initiateOAuth(callbackUrl: string): Promise<any> {
   try {
+    // Ensure the callback URL is exactly as registered in Twitter Developer Portal
+    // Do not encode it here, it will be encoded as part of the OAuth process
+    console.log(`Initiating OAuth with exact callback URL: ${callbackUrl}`);
+    
     const authURL = await generateTwitterAuthURL(callbackUrl);
     return {
       success: true,
@@ -446,8 +450,9 @@ serve(async (req) => {
       });
     } else if (endpoint === 'auth' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'auth') {
       // Initiate OAuth flow using the callbackUrl provided or the default
-      const callbackUrl = (body as any).callbackUrl || TWITTER_CALLBACK_URL;
-      console.log(`Using provided callback URL: ${callbackUrl}`);
+      // Important: This URL MUST match exactly what's registered in the Twitter Developer Portal
+      const callbackUrl = "https://fxzamjowvpnyuxthusib.supabase.co/auth/v1/callback";
+      console.log(`Using callback URL: ${callbackUrl}`);
       
       const result = await initiateOAuth(callbackUrl);
       return new Response(JSON.stringify(result), {

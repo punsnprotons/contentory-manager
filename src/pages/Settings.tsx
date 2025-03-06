@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -113,13 +112,9 @@ const Settings = () => {
       console.log('Initiating Twitter authentication...');
       const twitterService = new TwitterApiService(session.user.id);
       
-      // Get the application URL for the callback
-      // Use a callback URL that matches what's registered in your Twitter Developer portal
-      // This URL MUST be registered in your Twitter Developer portal settings
       const callbackUrl = 'https://fxzamjowvpnyuxthusib.supabase.co/auth/v1/callback';
       console.log(`Using Twitter callback URL: ${callbackUrl}`);
       
-      // Pass the callback URL to the Twitter service
       const authURL = await twitterService.initiateAuth(callbackUrl);
       
       window.location.href = authURL;
