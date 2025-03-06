@@ -17,18 +17,18 @@ const corsHeaders = {
 
 // Validate environment variables
 function validateEnvironmentVariables() {
-  if (!API_KEY) {
-    throw new Error("Missing TWITTER_API_KEY environment variable");
+  const missingVars = [];
+  
+  if (!API_KEY) missingVars.push("TWITTER_API_KEY");
+  if (!API_SECRET) missingVars.push("TWITTER_API_SECRET");
+  if (!ACCESS_TOKEN) missingVars.push("TWITTER_ACCESS_TOKEN");
+  if (!ACCESS_TOKEN_SECRET) missingVars.push("TWITTER_ACCESS_TOKEN_SECRET");
+  
+  if (missingVars.length > 0) {
+    throw new Error(`Missing environment variables: ${missingVars.join(", ")}`);
   }
-  if (!API_SECRET) {
-    throw new Error("Missing TWITTER_API_SECRET environment variable");
-  }
-  if (!ACCESS_TOKEN) {
-    throw new Error("Missing TWITTER_ACCESS_TOKEN environment variable");
-  }
-  if (!ACCESS_TOKEN_SECRET) {
-    throw new Error("Missing TWITTER_ACCESS_TOKEN_SECRET environment variable");
-  }
+  
+  console.log("All Twitter API credentials are present");
 }
 
 // Generate OAuth signature for Twitter API
@@ -136,7 +136,7 @@ function generateTwitterAuthURL(): string {
   return `https://api.twitter.com/oauth/authenticate?oauth_token=${encodeURIComponent(ACCESS_TOKEN!)}`;
 }
 
-const BASE_URL = "https://api.x.com/2";
+const BASE_URL = "https://api.twitter.com/2";
 
 // Get current Twitter user profile
 async function getUser() {
