@@ -32,6 +32,22 @@ const Settings = () => {
   const [error, setError] = useState<string | null>(null);
   const { session } = useAuth();
   
+  // Add this to force refresh of connections when the component mounts
+  // or when URL has a specific parameter
+  useEffect(() => {
+    // Check if we just came back from Twitter auth flow
+    const hasAuthParam = window.location.search.includes('auth=success');
+
+    if (hasAuthParam) {
+      // Clean up the URL
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+      
+      // Show success message
+      toast.success("Successfully connected to Twitter!");
+    }
+  }, []);
+  
   useEffect(() => {
     if (session?.user) {
       console.log("Settings: Session user available, loading settings", session.user);
@@ -188,7 +204,19 @@ const Settings = () => {
       
       toast.info('Please complete authentication in the opened window');
       
-      // The rest of the flow is handled by the message listener in TwitterApiService
+      // Add event listener to handle postMessage from popup
+      const messageHandler = (event: MessageEvent) => {
+        console.log("Settings: Received message event:", event);
+        
+        if (event.data && event.data.type === 'TWITTER_AUTH_SUCCESS') {
+          console.log("Settings: Auth success message received, refreshing connections");
+          // Refresh connections to show updated status
+          loadConnections();
+          window.removeEventListener('message', messageHandler);
+        }
+      };
+      
+      window.addEventListener('message', messageHandler);
     } catch (error) {
       console.error('Error connecting Twitter:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to connect Twitter');
@@ -348,7 +376,7 @@ const Settings = () => {
                             onClick={connection.platform === 'twitter' ? importTwitterTweets : undefined}
                             disabled={importLoading || connection.platform !== 'twitter'}
                           >
-                            {importLoading ? (
+                            {importLoading && connection.platform === 'twitter' ? (
                               <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                 Importing...

@@ -457,7 +457,7 @@ export class TwitterApiService {
   private handleAuthMessage = async (event: MessageEvent) => {
     console.log("TwitterApiService: Received message:", event);
     
-    if (event.data && event.data.type === 'TWITTER_AUTH_SUCCESS') {
+    if (event.data && event.data.type === "TWITTER_AUTH_SUCCESS") {
       console.log("TwitterApiService: Received successful auth callback:", event.data);
       
       try {
@@ -481,8 +481,13 @@ export class TwitterApiService {
           console.log("TwitterApiService: Successfully stored Twitter connection");
           toast.success("Successfully connected to Twitter");
           
-          // Force page reload to reflect the new connection state
-          window.location.href = "/settings";
+          // Forward the auth success message back to the opener
+          window.postMessage({ type: "TWITTER_AUTH_SUCCESS", data: event.data.data }, "*");
+          
+          // Add a parameter to the URL to indicate we came from auth flow
+          // This is cleaner than reloading the page and will help the Settings component
+          // know that it should refresh the connections
+          window.location.href = "/settings?auth=success";
         }
       } catch (error) {
         console.error("TwitterApiService: Error handling auth success:", error);
