@@ -32,87 +32,88 @@ function validateEnvironmentVariables() {
   console.log("Using callback URL:", CALLBACK_URL);
 }
 
-// Generate OAuth signature for Twitter API
+// Generate OAuth 1.0a signature
 function generateOAuthSignature(
   method: string,
   url: string,
   params: Record<string, string>,
   consumerSecret: string,
-  tokenSecret: string = "" // Token secret is empty for request token step
+  tokenSecret: string = ""
 ): string {
-  // Sort parameters by key (required for signature base string)
-  const sortedParams = Object.keys(params).sort().reduce(
-    (acc, key) => {
-      acc[key] = params[key];
-      return acc;
-    }, 
-    {} as Record<string, string>
-  );
-
-  // Create signature base string
-  const signatureBaseString = `${method}&${encodeURIComponent(
-    url
-  )}&${encodeURIComponent(
-    Object.entries(sortedParams)
-      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-      .join("&")
-  )}`;
+  // 1. Create parameter string - all parameters must be sorted alphabetically
+  const parameterString = Object.keys(params)
+    .sort()
+    .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
+    .join('&');
+    
+  // 2. Create signature base string
+  const signatureBaseString = [
+    method.toUpperCase(),
+    encodeURIComponent(url),
+    encodeURIComponent(parameterString)
+  ].join('&');
   
-  // Create signing key
-  const signingKey = `${encodeURIComponent(consumerSecret)}&${encodeURIComponent(tokenSecret)}`;
+  // 3. Create signing key
+  const signingKey = `${encodeURIComponent(consumerSecret)}&${encodeURIComponent(tokenSecret || "")}`;
   
-  // Generate HMAC-SHA1 signature
-  const hmacSha1 = createHmac("sha1", signingKey);
-  const signature = hmacSha1.update(signatureBaseString).digest("base64");
-
+  // 4. Generate HMAC-SHA1 signature
+  const hmac = createHmac('sha1', signingKey);
+  const signature = hmac.update(signatureBaseString).digest('base64');
+  
+  console.log("Parameter String:", parameterString);
   console.log("Signature Base String:", signatureBaseString);
+  console.log("Signing Key:", signingKey);
   console.log("Generated Signature:", signature);
-
+  
   return signature;
 }
 
-// Generate OAuth header for Twitter API requests
+// Generate OAuth authorization header
 function generateOAuthHeader(
-  method: string, 
-  url: string, 
-  extraParams: Record<string, string> = {},
-  token = ACCESS_TOKEN,
-  tokenSecret = ACCESS_TOKEN_SECRET
+  method: string,
+  url: string,
+  additionalParams: Record<string, string> = {},
+  token: string | null = null,
+  tokenSecret: string = ""
 ): string {
+  // Create OAuth parameters
   const oauthParams: Record<string, string> = {
     oauth_consumer_key: API_KEY!,
-    oauth_nonce: Math.random().toString(36).substring(2),
-    oauth_signature_method: "HMAC-SHA1",
+    oauth_nonce: Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2),
+    oauth_signature_method: 'HMAC-SHA1',
     oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
-    oauth_version: "1.0",
-    ...extraParams
+    oauth_version: '1.0',
+    ...additionalParams
   };
-
-  // Add token if available (not used in request token step)
+  
+  // Add token if provided (not used for request token)
   if (token) {
     oauthParams.oauth_token = token;
   }
-
+  
+  // Prepare all parameters for signature (oauth params + any other params)
+  const allParams = { ...oauthParams };
+  
+  // Generate signature
   const signature = generateOAuthSignature(
     method,
     url,
-    oauthParams,
+    allParams,
     API_SECRET!,
     tokenSecret
   );
-
-  const headerParams = {
-    ...oauthParams,
-    oauth_signature: signature,
-  };
-
-  return (
-    "OAuth " +
-    Object.entries(headerParams)
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([k, v]) => `${encodeURIComponent(k)}="${encodeURIComponent(v)}"`)
-      .join(", ")
-  );
+  
+  // Add signature to OAuth parameters
+  oauthParams.oauth_signature = signature;
+  
+  // Build authorization header string
+  const authHeader = 'OAuth ' + Object.keys(oauthParams)
+    .sort()
+    .map(key => `${encodeURIComponent(key)}="${encodeURIComponent(oauthParams[key])}"`)
+    .join(', ');
+    
+  console.log("Full OAuth Header:", authHeader);
+  return authHeader;
 }
 
 // Request a temporary token from Twitter
@@ -120,55 +121,50 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
   const requestTokenURL = 'https://api.twitter.com/oauth/request_token';
   const method = 'POST';
   
-  // Include callback URL in the parameters for the signature
+  // Create OAuth parameters including callback
   const oauthParams: Record<string, string> = {
-    oauth_callback: CALLBACK_URL,
+    oauth_callback: encodeURIComponent(CALLBACK_URL)
   };
-
-  // Generate OAuth header with the callback parameter
-  const oauthHeader = generateOAuthHeader(
-    method,
-    requestTokenURL,
-    oauthParams,
-    "", // No token for request token step
-    ""  // No token secret for request token step
-  );
-
-  console.log("OAuth Header for Request Token:", oauthHeader);
-
+  
+  // Generate authorization header
+  const authHeader = generateOAuthHeader(method, requestTokenURL, oauthParams);
+  
+  console.log("Requesting token with header:", authHeader);
+  console.log("Request URL:", requestTokenURL);
+  
   try {
     const response = await fetch(requestTokenURL, {
       method: method,
       headers: {
-        'Authorization': oauthHeader,
+        'Authorization': authHeader,
         'Content-Type': 'application/x-www-form-urlencoded'
       }
     });
-
+    
+    const responseText = await response.text();
+    console.log("Response status:", response.status);
+    console.log("Response text:", responseText);
+    
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Error getting request token: ${response.status} ${response.statusText}`);
-      console.error(`Response: ${errorText}`);
       throw new Error(`Error getting request token: ${response.status} ${response.statusText}`);
     }
-
-    const responseText = await response.text();
-    console.log("Request Token Response:", responseText);
-
-    // Parse response into key-value pairs
-    const parsedResponse: Record<string, string> = {};
-    responseText.split('&').forEach(pair => {
-      const [key, value] = pair.split('=');
-      parsedResponse[key] = value;
-    });
-
-    if (!parsedResponse.oauth_token || !parsedResponse.oauth_token_secret) {
-      throw new Error("Invalid response from Twitter: missing token or token secret");
+    
+    // Parse response parameters
+    const responseParts = responseText.split('&');
+    const responseParams: Record<string, string> = {};
+    
+    for (const part of responseParts) {
+      const [key, value] = part.split('=');
+      responseParams[key] = value;
     }
-
+    
+    if (!responseParams.oauth_token || !responseParams.oauth_token_secret) {
+      throw new Error("Invalid response: missing token or token secret");
+    }
+    
     return {
-      oauth_token: parsedResponse.oauth_token,
-      oauth_token_secret: parsedResponse.oauth_token_secret
+      oauth_token: responseParams.oauth_token,
+      oauth_token_secret: responseParams.oauth_token_secret
     };
   } catch (error) {
     console.error("Error requesting token:", error);
@@ -176,7 +172,7 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
   }
 }
 
-// Generate Twitter OAuth authorization URL
+// Generate authentication URL
 async function generateTwitterAuthURL(): Promise<string> {
   try {
     const { oauth_token } = await getRequestToken();
@@ -189,21 +185,21 @@ async function generateTwitterAuthURL(): Promise<string> {
   }
 }
 
+// Twitter API v2 base URL
 const BASE_URL = "https://api.twitter.com/2";
 
-// Get current Twitter user profile
+// Get current user profile
 async function getUser() {
   const url = `${BASE_URL}/users/me`;
   const method = "GET";
-  const oauthHeader = generateOAuthHeader(method, url);
+  const authHeader = generateOAuthHeader(method, url, {}, ACCESS_TOKEN, ACCESS_TOKEN_SECRET);
   
   console.log("Getting Twitter user profile");
-  console.log("OAuth Header:", oauthHeader);
   
   const response = await fetch(url, {
     method: method,
     headers: {
-      Authorization: oauthHeader,
+      Authorization: authHeader,
       "Content-Type": "application/json",
     },
   });
@@ -223,19 +219,19 @@ async function getUser() {
 async function sendTweet(tweetText: string): Promise<any> {
   const url = `${BASE_URL}/tweets`;
   const method = "POST";
-  const params = { text: tweetText };
+  const requestBody = { text: tweetText };
 
-  const oauthHeader = generateOAuthHeader(method, url);
+  const authHeader = generateOAuthHeader(method, url, {}, ACCESS_TOKEN, ACCESS_TOKEN_SECRET);
+  
   console.log("Sending tweet:", tweetText);
-  console.log("OAuth Header:", oauthHeader);
-
+  
   const response = await fetch(url, {
     method: method,
     headers: {
-      Authorization: oauthHeader,
+      Authorization: authHeader,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(params),
+    body: JSON.stringify(requestBody),
   });
 
   const responseText = await response.text();
