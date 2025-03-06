@@ -39,3 +39,31 @@ export const isAuthenticated = async () => {
   const { data: { session } } = await supabase.auth.getSession();
   return !!session;
 };
+
+// Helper for storing OAuth tokens
+export const storeOAuthTokens = async (userId: string, platform: string, tokens: { access_token: string, refresh_token?: string }) => {
+  return supabase
+    .from('platform_connections')
+    .upsert({
+      user_id: userId,
+      platform,
+      connected: true,
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token || null,
+      updated_at: new Date().toISOString()
+    });
+};
+
+// Helper for Twitter OAuth process
+export const processTwitterCallback = async (userId: string, oauthToken: string, oauthVerifier: string) => {
+  try {
+    // We'll add more complex token exchange logic later
+    return storeOAuthTokens(userId, 'twitter', {
+      access_token: oauthToken,
+      refresh_token: oauthVerifier
+    });
+  } catch (error) {
+    console.error('Error processing Twitter callback:', error);
+    throw error;
+  }
+};
