@@ -470,6 +470,7 @@ export class TwitterApiService {
             connected: true,
             username: 'twitter_user', // This should be updated with the actual username
             access_token: event.data.data.token,
+            refresh_token: event.data.data.verifier, // Store the verifier as refresh_token
             updated_at: new Date().toISOString()
           });
           

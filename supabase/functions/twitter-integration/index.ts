@@ -197,13 +197,11 @@ async function handleCallback(url: URL): Promise<any> {
   
   console.log("Received callback with token:", oauth_token, "and verifier:", oauth_verifier);
   
-  // Now we need to exchange these for an access token
-  // This is where you would typically store the tokens in your database for the user
-  
-  // For testing purposes, redirect to a success page
+  // Return success and include the origin of the request for dynamic redirect
   return {
     success: true,
     token: oauth_token,
+    verifier: oauth_verifier,
     message: "Successfully authenticated with Twitter"
   };
 }
@@ -418,7 +416,13 @@ serve(async (req) => {
       console.log("Handling Twitter callback");
       const result = await handleCallback(url);
       
-      // Redirect back to the application with success
+      // Extract the origin from the referer or set a default
+      const referer = req.headers.get('referer') || '';
+      const origin = referer ? new URL(referer).origin : 'https://fxzamjowvpnyuxthusib.vercel.app';
+      
+      console.log("Using origin for redirect:", origin);
+      
+      // Redirect back to the application with success - using dynamic origin
       return new Response(
         `<html><body><script>window.opener.postMessage({type: "TWITTER_AUTH_SUCCESS", data: ${JSON.stringify(result)}}, "*"); window.close();</script></body></html>`,
         { 
