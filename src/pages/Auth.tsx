@@ -167,11 +167,7 @@ const Auth: React.FC = () => {
                 <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-md border border-green-100 dark:border-green-900">
                   <h3 className="font-medium text-green-800 dark:text-green-300">Registration successful!</h3>
                   <p className="text-sm text-green-700 dark:text-green-400 mt-1">
-                    {supabase.auth.getSettings ? (
-                      <>Please check your email for a confirmation link before logging in.</>
-                    ) : (
-                      <>You can now sign in with your email and password.</>
-                    )}
+                    Please check your email for a confirmation link before logging in.
                   </p>
                 </div>
                 <Button 
