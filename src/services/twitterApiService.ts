@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 import { ContentType } from "@/types";
+import { toast } from "sonner";
 
 /**
  * Twitter API Service for making authenticated Twitter API calls
@@ -243,7 +244,7 @@ export class TwitterApiService {
   /**
    * Fetch user tweets and store them in the database
    */
-  async fetchUserTweets(limit = 10): Promise<any> {
+  async fetchUserTweets(limit = 50): Promise<any> {
     console.log(`TwitterApiService: fetchUserTweets - isInitialized: ${this.isInitialized}, username: ${this.username}`);
     
     if (!this.isInitialized) {
@@ -316,7 +317,7 @@ export class TwitterApiService {
         }
         
         // Store metrics if we have public_metrics
-        if (tweet.public_metrics) {
+        if (tweet.public_metrics && contentData) {
           const { error: metricsError } = await supabase
             .from('content_metrics')
             .insert({
@@ -335,19 +336,21 @@ export class TwitterApiService {
         }
         
         // Store activity history
-        const { error: activityError } = await supabase
-          .from('activity_history')
-          .insert({
-            user_id: this.userId,
-            content_id: contentData.id,
-            platform: 'twitter',
-            activity_type: 'post',
-            activity_detail: { tweet_id: tweet.id },
-            occurred_at: new Date(tweet.created_at).toISOString()
-          });
-          
-        if (activityError) {
-          console.error(`TwitterApiService: Error storing activity history:`, activityError);
+        if (contentData) {
+          const { error: activityError } = await supabase
+            .from('activity_history')
+            .insert({
+              user_id: this.userId,
+              content_id: contentData.id,
+              platform: 'twitter',
+              activity_type: 'post',
+              activity_detail: { tweet_id: tweet.id },
+              occurred_at: new Date(tweet.created_at).toISOString()
+            });
+            
+          if (activityError) {
+            console.error(`TwitterApiService: Error storing activity history:`, activityError);
+          }
         }
       }
       
@@ -356,6 +359,30 @@ export class TwitterApiService {
     } catch (error) {
       console.error('TwitterApiService: Error fetching and storing user tweets:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Manually trigger tweet fetching and import
+   * This can be called from a settings page
+   */
+  async importTwitterPosts(): Promise<{ success: boolean; message: string }> {
+    try {
+      console.log("TwitterApiService: Starting manual import of tweets");
+      
+      // Fetch 50 tweets
+      const tweets = await this.fetchUserTweets(50);
+      
+      return {
+        success: true,
+        message: `Successfully imported ${tweets.length} tweets from Twitter`
+      };
+    } catch (error) {
+      console.error("TwitterApiService: Error in importTwitterPosts:", error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error importing tweets"
+      };
     }
   }
 

@@ -1,4 +1,3 @@
-
 import { createHmac } from "node:crypto";
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
@@ -437,8 +436,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } else if (endpoint === 'tweets' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'tweets') {
-      // Get user tweets
-      const limit = (body as any).limit || 10;
+      // Get user tweets - increase default limit to fetch more tweets
+      const limit = (body as any).limit || 50; // Increase default limit to 50
       const tweets = await getUserTweets(limit);
       return new Response(JSON.stringify(tweets), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

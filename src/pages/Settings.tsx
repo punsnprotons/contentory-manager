@@ -1,968 +1,282 @@
-import React, { useEffect, useState } from "react";
-import { Bell, FileText, Globe, Lock, Mail, User, X, Check, Plus, Twitter } from "lucide-react";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { toast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { Loader2 } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
-import { TwitterApiService } from "@/services/twitterApiService";
 
-interface UserSettings {
-  id: string;
-  theme: string;
-  enable_notifications: boolean;
-  language: string;
-}
+import React, { useState, useEffect } from 'react';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { TwitterApiService } from '@/services/twitterApiService';
+import { toast } from 'sonner';
+import { PlusCircle, Twitter, Instagram, CheckCircle, AlertCircle } from 'lucide-react';
 
-interface UserProfile {
-  id: string;
-  email: string;
-  first_name: string | null;
-  last_name: string | null;
-  profile_image: string | null;
-}
-
-interface PlatformConnection {
-  id: string;
-  platform: 'instagram' | 'twitter';
-  username: string;
-  profile_image: string | null;
-  connected: boolean;
-}
-
-interface TwitterVerificationResult {
-  verified: boolean;
-  user?: {
-    id: string;
-    name: string;
-    username: string;
-  };
-  message: string;
-}
-
-const Settings: React.FC = () => {
+const Settings = () => {
+  const [loading, setLoading] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [notifications, setNotifications] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
+  const [connections, setConnections] = useState<{platform: string, connected: boolean, username?: string}[]>([]);
   const { session } = useAuth();
-  const [isLoading, setIsLoading] = useState(true);
-  const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [connections, setConnections] = useState<PlatformConnection[]>([]);
-  const [formProfile, setFormProfile] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    company: ''
-  });
-  const [passwordForm, setPasswordForm] = useState({
-    current: '',
-    new: '',
-    confirm: ''
-  });
-  const [isVerifyingTwitter, setIsVerifyingTwitter] = useState(false);
-  const [isConnectingTwitter, setIsConnectingTwitter] = useState(false);
-  const [twitterService, setTwitterService] = useState<TwitterApiService | null>(null);
-  const [isVerifyingInitialization, setIsVerifyingInitialization] = useState(false);
-  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
-
+  
   useEffect(() => {
-    async function loadTwitterService() {
-      if (session) {
-        try {
-          const service = await TwitterApiService.create(session);
-          setTwitterService(service);
-        } catch (error) {
-          console.log("No Twitter connection found or not initialized yet");
-        }
-      }
+    if (session?.user) {
+      loadUserSettings();
+      loadConnections();
     }
-    
-    loadTwitterService();
   }, [session]);
 
-  useEffect(() => {
-    async function fetchUserData() {
-      try {
-        const { data: settingsData, error: settingsError } = await supabase
-          .from('user_settings')
-          .select('*')
-          .single();
-
-        if (settingsError && settingsError.code !== 'PGRST116') {
-          console.error('Error fetching settings:', settingsError);
-          toast({
-            title: "Failed to load settings",
-            description: "There was an error loading your settings. Please try again.",
-            variant: "destructive"
-          });
-        } else if (settingsData) {
-          setUserSettings(settingsData);
-        }
-
-        const { data: profileData, error: profileError } = await supabase
-          .from('users')
-          .select('*')
-          .single();
-
-        if (profileError) {
-          console.error('Error fetching profile:', profileError);
-        } else if (profileData) {
-          setUserProfile(profileData);
-          setFormProfile({
-            firstName: profileData.first_name || '',
-            lastName: profileData.last_name || '',
-            email: profileData.email || '',
-            company: ''
-          });
-        }
-
-        const { data: connectionsData, error: connectionsError } = await supabase
-          .from('platform_connections')
-          .select('*');
-
-        if (connectionsError) {
-          console.error('Error fetching connections:', connectionsError);
-        } else if (connectionsData) {
-          setConnections(connectionsData);
-        }
-
-      } catch (error) {
-        console.error('Error in data fetching:', error);
-        toast({
-          title: "Error",
-          description: "Failed to load user data. Please refresh the page.",
-          variant: "destructive"
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    fetchUserData();
-  }, []);
-
-  const handleProfileUpdate = async () => {
-    if (!userProfile) return;
-    
+  const loadUserSettings = async () => {
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({
-          first_name: formProfile.firstName,
-          last_name: formProfile.lastName,
-          email: formProfile.email
-        })
-        .eq('id', userProfile.id);
-
-      if (error) {
-        throw error;
+      const { data, error } = await supabase
+        .from('user_settings')
+        .select('*')
+        .eq('user_id', session?.user.id)
+        .single();
+        
+      if (error) throw error;
+      
+      if (data) {
+        setNotifications(data.enable_notifications);
+        setDarkMode(data.theme === 'dark');
       }
-
-      toast({
-        title: "Profile updated",
-        description: "Your profile information has been updated successfully."
-      });
     } catch (error) {
-      console.error('Error updating profile:', error);
-      toast({
-        title: "Update failed",
-        description: "There was an error updating your profile.",
-        variant: "destructive"
-      });
+      console.error('Error loading user settings:', error);
     }
   };
-
-  const handlePasswordChange = () => {
-    if (passwordForm.new !== passwordForm.confirm) {
-      toast({
-        title: "Passwords don't match",
-        description: "Your new password and confirmation don't match.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    toast({
-      title: "Password changed",
-      description: "Your password has been updated successfully."
-    });
-    
-    setPasswordForm({
-      current: '',
-      new: '',
-      confirm: ''
-    });
-  };
-
-  const toggleNotificationSetting = async (setting: string, value: boolean) => {
-    if (!userSettings) return;
-
+  
+  const loadConnections = async () => {
     try {
-      const updates: Record<string, any> = {};
-      updates[setting] = value;
-
+      const { data, error } = await supabase
+        .from('platform_connections')
+        .select('platform, connected, username')
+        .eq('user_id', session?.user.id);
+        
+      if (error) throw error;
+      
+      if (data && data.length > 0) {
+        setConnections(data);
+      } else {
+        // Default connections if none found
+        setConnections([
+          { platform: 'twitter', connected: false },
+          { platform: 'instagram', connected: false }
+        ]);
+      }
+    } catch (error) {
+      console.error('Error loading connections:', error);
+    }
+  };
+  
+  const saveSettings = async () => {
+    setLoading(true);
+    try {
       const { error } = await supabase
         .from('user_settings')
-        .update(updates)
-        .eq('id', userSettings.id);
-
-      if (error) {
-        throw error;
-      }
-
-      setUserSettings(prev => prev ? { ...prev, ...updates } : null);
-
-      toast({
-        title: "Settings updated",
-        description: "Your notification preferences have been updated."
-      });
-    } catch (error) {
-      console.error('Error updating settings:', error);
-      toast({
-        title: "Update failed",
-        description: "There was an error updating your settings.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const disconnectPlatform = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from('platform_connections')
-        .update({ connected: false })
-        .eq('id', id);
-
-      if (error) {
-        throw error;
-      }
-
-      setConnections(prev => 
-        prev.map(conn => conn.id === id ? { ...conn, connected: false } : conn)
-      );
-
-      toast({
-        title: "Account disconnected",
-        description: "The social media account has been disconnected."
-      });
-    } catch (error) {
-      console.error('Error disconnecting account:', error);
-      toast({
-        title: "Disconnection failed",
-        description: "There was an error disconnecting the account.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleToggleSecuritySetting = async (setting: string, value: boolean) => {
-    toast({
-      title: "Security setting updated",
-      description: `The ${setting} setting has been ${value ? 'enabled' : 'disabled'}.`
-    });
-  };
-
-  const handleSave = () => {
-    toast({
-      title: "Settings saved",
-      description: "Your settings have been updated successfully.",
-    });
-  };
-
-  const verifyTwitterCredentials = async () => {
-    if (!session) {
-      toast({
-        title: "Authentication Required",
-        description: "You must be logged in to verify Twitter credentials.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    setIsVerifyingTwitter(true);
-    try {
-      let result;
-      
-      if (twitterService) {
-        result = await twitterService.verifyCredentials();
-      } else {
-        const response = await supabase.functions.invoke('twitter-integration', {
-          method: 'POST',
-          body: { endpoint: 'verify' }
-        });
-        result = response.data;
-      }
-      
-      if (result && result.verified && result.user) {
-        const { error } = await supabase
-          .from('platform_connections')
-          .upsert({
-            platform: 'twitter',
-            username: result.user.username,
-            connected: true,
-            user_id: userProfile?.id
-          }, {
-            onConflict: 'user_id, platform'
-          });
-          
-        if (error) {
-          console.error('Error saving Twitter connection:', error);
-          toast({
-            title: "Connection Error",
-            description: "Failed to save Twitter connection. Please try again.",
-            variant: "destructive"
-          });
-        } else {
-          const { data: refreshedConnections } = await supabase
-            .from('platform_connections')
-            .select('*');
-            
-          if (refreshedConnections) {
-            setConnections(refreshedConnections);
-          }
-          
-          if (session) {
-            const service = await TwitterApiService.create(session);
-            setTwitterService(service);
-          }
-          
-          toast({
-            title: "Twitter Connected",
-            description: `Successfully connected to Twitter as @${result.user.username}`,
-          });
-        }
-      } else {
-        toast({
-          title: "Verification Failed",
-          description: result?.message || "Could not verify Twitter credentials",
-          variant: "destructive"
-        });
-      }
-    } catch (error) {
-      console.error('Error verifying Twitter credentials:', error);
-      toast({
-        title: "Verification Error",
-        description: "An error occurred while verifying Twitter credentials. Check console for details.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsVerifyingTwitter(false);
-    }
-  };
-
-  const initiateTwitterAuth = async () => {
-    if (!session) {
-      toast({
-        title: "Authentication Required",
-        description: "You must be logged in to connect to Twitter.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    setIsConnectingTwitter(true);
-    try {
-      let authURL;
-      
-      if (twitterService) {
-        authURL = await twitterService.initiateAuth();
-      } else {
-        const response = await supabase.functions.invoke('twitter-integration', {
-          method: 'POST',
-          body: { endpoint: 'auth' }
+        .upsert({
+          user_id: session?.user.id,
+          enable_notifications: notifications,
+          theme: darkMode ? 'dark' : 'light'
         });
         
-        if (!response.data?.success || !response.data?.authURL) {
-          throw new Error(response.data?.message || "Failed to generate authentication URL");
-        }
-        
-        authURL = response.data.authURL;
-      }
+      if (error) throw error;
       
-      if (authURL) {
-        window.location.href = authURL;
-      } else {
-        throw new Error("No authentication URL returned");
-      }
+      toast.success('Settings saved successfully');
     } catch (error) {
-      console.error('Error initiating Twitter authentication:', error);
-      toast({
-        title: "Authentication Error",
-        description: error instanceof Error ? error.message : "An error occurred while initiating Twitter authentication.",
-        variant: "destructive"
-      });
+      console.error('Error saving settings:', error);
+      toast.error('Failed to save settings');
     } finally {
-      setIsConnectingTwitter(false);
+      setLoading(false);
     }
   };
-
-  const handleTestTweet = async () => {
-    if (!session) {
-      toast({
-        title: "Authentication Required",
-        description: "You must be logged in to send a tweet.",
-        variant: "destructive"
-      });
+  
+  const connectTwitter = async () => {
+    if (!session?.user) {
+      toast.error('You must be logged in to connect Twitter');
       return;
     }
     
+    setLoading(true);
     try {
-      if (twitterService) {
-        await twitterService.sendTweet("This is a test tweet from Wubble AI!");
-      } else {
-        await supabase.functions.invoke('twitter-integration', {
-          method: 'POST',
-          body: { endpoint: 'tweet', text: "This is a test tweet from Wubble AI!" }
-        });
-      }
+      const twitterService = new TwitterApiService(session.user.id);
+      const authURL = await twitterService.initiateAuth();
       
-      toast({
-        title: "Tweet Sent",
-        description: "Test tweet was sent successfully!",
-      });
+      // Open Twitter auth in a new window
+      window.open(authURL, '_blank', 'width=600,height=600');
+      toast.info('Please complete authentication in the opened window');
     } catch (error) {
-      console.error('Error sending test tweet:', error);
-      toast({
-        title: "Tweet Failed",
-        description: "Failed to send test tweet. Check console for details.",
-        variant: "destructive"
-      });
+      console.error('Error connecting Twitter:', error);
+      toast.error('Failed to connect Twitter');
+    } finally {
+      setLoading(false);
     }
   };
-
-  const verifyServiceInitialization = async () => {
-    if (!userProfile?.id) {
-      toast({
-        title: "User Profile Missing",
-        description: "Cannot verify service initialization without a user profile.",
-        variant: "destructive"
-      });
+  
+  const importTwitterTweets = async () => {
+    if (!session?.user) {
+      toast.error('You must be logged in to import tweets');
       return;
     }
     
-    setIsVerifyingInitialization(true);
+    setImportLoading(true);
     try {
-      console.log("Testing TwitterApiService initialization with userId:", userProfile.id);
-      const result = await TwitterApiService.verifyServiceInitialization(userProfile.id);
+      // Create and initialize Twitter service
+      const twitterService = await TwitterApiService.create(session);
       
-      if (result.success) {
-        toast({
-          title: "Service Initialization Successful",
-          description: result.message,
-        });
-      } else {
-        toast({
-          title: "Service Initialization Failed",
-          description: result.message,
-          variant: "destructive"
-        });
+      if (!twitterService) {
+        throw new Error('Could not initialize Twitter service');
       }
+      
+      // Fetch and store tweets
+      const result = await twitterService.fetchUserTweets(50);
+      
+      if (result && Array.isArray(result)) {
+        toast.success(`Successfully imported ${result.length} tweets from Twitter`);
+      } else {
+        toast.success('Twitter import completed');
+      }
+      
+      // Refresh connections to show updated status
+      loadConnections();
     } catch (error) {
-      console.error('Error testing service initialization:', error);
-      toast({
-        title: "Verification Error",
-        description: error instanceof Error ? error.message : "An error occurred while verifying service initialization.",
-        variant: "destructive"
-      });
+      console.error('Error importing tweets:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to import tweets');
     } finally {
-      setIsVerifyingInitialization(false);
+      setImportLoading(false);
     }
   };
-
-  const fetchTwitterProfile = async () => {
-    console.log("Settings: fetchTwitterProfile - Starting profile fetch process");
-    console.log("Settings: Current connections:", connections);
-    
-    try {
-      const twitterConnection = connections.find(conn => 
-        conn.platform === 'twitter' && conn.connected === true
-      );
-      
-      console.log("Settings: Found Twitter connection?", twitterConnection);
-      
-      if (!twitterConnection) {
-        console.log("Settings: No active Twitter connection found");
-        toast({
-          title: "Not Connected",
-          description: "You haven't connected to Twitter yet. Please connect first.",
-          variant: "destructive"
-        });
-        return;
-      }
-      
-      console.log("Settings: User profile ID:", userProfile?.id);
-      console.log("Settings: Auth ID from session:", session?.user?.id);
-      
-      if (!session?.user?.id) {
-        console.error("Settings: No user ID available from session");
-        toast({
-          title: "User Profile Missing",
-          description: "Cannot fetch Twitter profile without a user ID.",
-          variant: "destructive"
-        });
-        return;
-      }
-      
-      setIsLoadingProfile(true);
-      
-      const authId = session.user.id;
-      console.log("Settings: Verifying service initialization for auth ID:", authId);
-      
-      const initResult = await TwitterApiService.verifyServiceInitialization(authId);
-      console.log("Settings: Service initialization result:", initResult);
-      
-      if (!initResult.success) {
-        console.error("Settings: Service initialization failed:", initResult.message);
-        toast({
-          title: "Service Not Available",
-          description: initResult.message || "Twitter service is not initialized properly.",
-          variant: "destructive"
-        });
-        setIsLoadingProfile(false);
-        return;
-      }
-      
-      console.log("Settings: Creating Twitter service with session");
-      const service = await TwitterApiService.create(session);
-      console.log("Settings: Service created:", !!service);
-      
-      if (!service) {
-        console.error("Settings: Failed to create Twitter service");
-        toast({
-          title: "Service Not Available",
-          description: "Twitter service could not be initialized. Please reconnect to Twitter.",
-          variant: "destructive"
-        });
-        setIsLoadingProfile(false);
-        return;
-      }
-      
-      console.log("Settings: Fetching profile data with service");
-      const profileData = await service.fetchProfileData();
-      console.log("Settings: Profile data fetched:", profileData);
-      
-      if (profileData) {
-        toast({
-          title: "Profile Data Fetched",
-          description: `Successfully retrieved and stored profile data for Twitter`,
-        });
-        
-        const { data: refreshedConnections } = await supabase
-          .from('platform_connections')
-          .select('*');
-          
-        if (refreshedConnections) {
-          console.log("Settings: Updating connections with refreshed data");
-          setConnections(refreshedConnections);
-        }
-      } else {
-        toast({
-          title: "Fetch Failed",
-          description: "Could not fetch profile data. Check logs for details.",
-          variant: "destructive"
-        });
-      }
-    } catch (error) {
-      console.error('Settings: Error fetching Twitter profile data:', error);
-      toast({
-        title: "Profile Data Error",
-        description: error instanceof Error ? error.message : "An error occurred while fetching profile data.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoadingProfile(false);
-    }
-  };
-
-  if (isLoading) {
-    return <div className="container-page flex items-center justify-center min-h-[50vh]">
-      <div className="text-xl font-medium">Loading settings...</div>
-    </div>;
-  }
 
   return (
-    <div className="container-page animate-fade-in">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Settings</h1>
-        <Button onClick={handleSave}>Save Changes</Button>
+    <div className="container mx-auto py-6 space-y-8">
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
       </div>
-
-      <Tabs defaultValue="account" className="w-full">
-        <TabsList className="mb-6">
-          <TabsTrigger value="account">
-            <User className="h-4 w-4 mr-2" />
-            Account
-          </TabsTrigger>
-          <TabsTrigger value="notifications">
-            <Bell className="h-4 w-4 mr-2" />
-            Notifications
-          </TabsTrigger>
-          <TabsTrigger value="integrations">
-            <Globe className="h-4 w-4 mr-2" />
-            Social Integrations
-          </TabsTrigger>
-          <TabsTrigger value="security">
-            <Lock className="h-4 w-4 mr-2" />
-            Security
-          </TabsTrigger>
+      
+      <Tabs defaultValue="general" className="w-full">
+        <TabsList className="mb-4">
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="connections">Connections</TabsTrigger>
+          <TabsTrigger value="notifications">Notifications</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="account">
+        
+        <TabsContent value="general" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Personal Information</CardTitle>
-              <CardDescription>
-                Update your account information and profile details.
-              </CardDescription>
+              <CardTitle>General Settings</CardTitle>
+              <CardDescription>Manage your account preferences</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="firstName">First Name</Label>
-                <Input 
-                  id="firstName" 
-                  value={formProfile.firstName}
-                  onChange={(e) => setFormProfile(prev => ({ ...prev, firstName: e.target.value }))}
+              <div className="flex items-center justify-between">
+                <Label htmlFor="dark-mode" className="flex flex-col space-y-1">
+                  <span>Dark Mode</span>
+                  <span className="text-sm text-muted-foreground">
+                    Enable dark mode for the interface
+                  </span>
+                </Label>
+                <Switch 
+                  id="dark-mode" 
+                  checked={darkMode} 
+                  onCheckedChange={setDarkMode} 
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="lastName">Last Name</Label>
-                <Input 
-                  id="lastName" 
-                  value={formProfile.lastName}
-                  onChange={(e) => setFormProfile(prev => ({ ...prev, lastName: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
-                <Input 
-                  id="email" 
-                  type="email" 
-                  value={formProfile.email}
-                  onChange={(e) => setFormProfile(prev => ({ ...prev, email: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="company">Company</Label>
-                <Input 
-                  id="company" 
-                  value={formProfile.company}
-                  onChange={(e) => setFormProfile(prev => ({ ...prev, company: e.target.value }))}
-                />
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button onClick={handleProfileUpdate}>Update Profile</Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="notifications">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
-              <CardDescription>
-                Configure how and when you receive notifications.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-base">Email Notifications</Label>
-                    <div className="text-sm text-muted-foreground">
-                      Receive email updates about your account activity.
-                    </div>
-                  </div>
-                  <Switch 
-                    checked={userSettings?.enable_notifications ?? true} 
-                    onCheckedChange={(checked) => toggleNotificationSetting('enable_notifications', checked)}
-                  />
-                </div>
-                <Separator />
-                
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-base">Content Published</Label>
-                    <div className="text-sm text-muted-foreground">
-                      Get notified when your content is published.
-                    </div>
-                  </div>
-                  <Switch defaultChecked={true} />
-                </div>
-                <Separator />
-                
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-base">Content Analytics</Label>
-                    <div className="text-sm text-muted-foreground">
-                      Receive weekly reports about your content performance.
-                    </div>
-                  </div>
-                  <Switch defaultChecked={true} />
-                </div>
-                <Separator />
-                
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-base">Marketing Updates</Label>
-                    <div className="text-sm text-muted-foreground">
-                      Receive marketing emails and special offers.
-                    </div>
-                  </div>
-                  <Switch defaultChecked={false} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="integrations">
-          <Card>
-            <CardHeader>
-              <CardTitle>Connected Accounts</CardTitle>
-              <CardDescription>
-                Manage your connected social media accounts.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {connections.length > 0 ? (
-                connections.map(connection => (
-                  <React.Fragment key={connection.id}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className={`w-10 h-10 ${connection.platform === 'instagram' ? 'bg-pink-500' : 'bg-blue-500'} rounded-full flex items-center justify-center`}>
-                          {connection.platform === 'instagram' ? (
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
-                              <rect width="20" height="20" x="2" y="2" rx="5" ry="5"/>
-                              <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
-                              <line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/>
-                            </svg>
-                          ) : (
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
-                              <path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"/>
-                            </svg>
-                          )}
-                        </div>
-                        <div>
-                          <div className="font-medium">{connection.platform === 'instagram' ? 'Instagram' : 'Twitter'}</div>
-                          <div className="text-sm text-muted-foreground">@{connection.username}</div>
-                        </div>
-                      </div>
-                      <Button variant="ghost" size="icon" onClick={() => disconnectPlatform(connection.id)}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <Separator />
-                  </React.Fragment>
-                ))
-              ) : (
-                <div className="text-center py-4 text-muted-foreground">No connected accounts found.</div>
-              )}
               
-              <div className="space-y-6 pt-4">
-                <Card className="border-dashed">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center">
-                      <Twitter className="h-5 w-5 mr-2 text-blue-500" />
-                      Twitter Integration
-                    </CardTitle>
-                    <CardDescription>
-                      Connect your Twitter account to publish content directly.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="rounded-md bg-slate-50 p-4 dark:bg-slate-900">
-                      <p className="text-sm">
-                        Twitter API access is configured through your application's backend.
-                        Credentials are stored securely and used to publish content on your behalf.
-                      </p>
-                    </div>
-                    
-                    <div className="flex flex-col space-y-2">
-                      <div className="flex space-x-2">
-                        <Button 
-                          onClick={verifyTwitterCredentials} 
-                          disabled={isVerifyingTwitter}
-                          className="flex-1"
-                        >
-                          {isVerifyingTwitter ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Verifying...
-                            </>
-                          ) : (
-                            <>
-                              <Check className="mr-2 h-4 w-4" />
-                              Verify Connection
-                            </>
-                          )}
-                        </Button>
-                        
-                        <Button 
-                          onClick={initiateTwitterAuth}
-                          disabled={isConnectingTwitter}
-                          variant="outline"
-                          className="flex-1"
-                        >
-                          {isConnectingTwitter ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Connecting...
-                            </>
-                          ) : (
-                            <>
-                              <Twitter className="mr-2 h-4 w-4" />
-                              Connect with Twitter
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                      
-                      <div className="flex space-x-2">
-                        <Button 
-                          onClick={handleTestTweet}
-                          variant="outline"
-                          className="flex-1"
-                        >
-                          Send Test Tweet
-                        </Button>
-                        
-                        <Button 
-                          onClick={fetchTwitterProfile}
-                          variant="outline"
-                          disabled={isLoadingProfile}
-                          className="flex-1"
-                        >
-                          {isLoadingProfile ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Fetching Profile...
-                            </>
-                          ) : (
-                            <>
-                              <User className="mr-2 h-4 w-4" />
-                              Fetch Profile Data
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                      
-                      <div className="flex space-x-2">
-                        <Button 
-                          onClick={verifyServiceInitialization}
-                          variant="outline"
-                          disabled={isVerifyingInitialization}
-                          className="flex-1"
-                        >
-                          {isVerifyingInitialization ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Testing Service...
-                            </>
-                          ) : (
-                            <>
-                              <Check className="mr-2 h-4 w-4" />
-                              Verify Service Init
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                <Button className="w-full" variant="outline">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Connect Other Account
+              <div className="pt-4">
+                <Button onClick={saveSettings} disabled={loading}>
+                  {loading ? 'Saving...' : 'Save Settings'}
                 </Button>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
-
-        <TabsContent value="security">
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Password</CardTitle>
-                <CardDescription>
-                  Change your password or enable two-factor authentication.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="current">Current Password</Label>
-                  <Input 
-                    id="current" 
-                    type="password" 
-                    value={passwordForm.current}
-                    onChange={(e) => setPasswordForm(prev => ({ ...prev, current: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="new">New Password</Label>
-                  <Input 
-                    id="new" 
-                    type="password" 
-                    value={passwordForm.new}
-                    onChange={(e) => setPasswordForm(prev => ({ ...prev, new: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirm">Confirm Password</Label>
-                  <Input 
-                    id="confirm" 
-                    type="password" 
-                    value={passwordForm.confirm}
-                    onChange={(e) => setPasswordForm(prev => ({ ...prev, confirm: e.target.value }))}
-                  />
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Button onClick={handlePasswordChange}>Change Password</Button>
-              </CardFooter>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Two-Factor Authentication</CardTitle>
-                <CardDescription>
-                  Add an extra layer of security to your account.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-base">Two-Factor Authentication</Label>
-                    <div className="text-sm text-muted-foreground">
-                      Secure your account with 2FA.
+        
+        <TabsContent value="connections" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Social Media Connections</CardTitle>
+              <CardDescription>Connect your social media accounts</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {connections.map((connection, index) => (
+                <React.Fragment key={connection.platform}>
+                  {index > 0 && <Separator className="my-4" />}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      {connection.platform === 'twitter' ? (
+                        <Twitter className="h-8 w-8 text-blue-400" />
+                      ) : (
+                        <Instagram className="h-8 w-8 text-pink-500" />
+                      )}
+                      <div>
+                        <p className="font-medium capitalize">{connection.platform}</p>
+                        {connection.connected && connection.username && (
+                          <p className="text-sm text-muted-foreground">
+                            Connected as @{connection.username}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      {connection.connected ? (
+                        <>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={importTwitterTweets}
+                            disabled={importLoading || connection.platform !== 'twitter'}
+                          >
+                            {importLoading ? 'Importing...' : 'Import Posts'}
+                          </Button>
+                          <CheckCircle className="h-5 w-5 text-green-500" />
+                        </>
+                      ) : (
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={connection.platform === 'twitter' ? connectTwitter : undefined}
+                          disabled={loading || connection.platform !== 'twitter'}
+                        >
+                          <PlusCircle className="h-4 w-4 mr-2" />
+                          Connect
+                        </Button>
+                      )}
                     </div>
                   </div>
-                  <Switch 
-                    defaultChecked={false} 
-                    onCheckedChange={(checked) => handleToggleSecuritySetting('2fa', checked)}
-                  />
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-base">Login Notifications</Label>
-                    <div className="text-sm text-muted-foreground">
-                      Receive notifications for new device logins.
-                    </div>
-                  </div>
-                  <Switch 
-                    defaultChecked={true} 
-                    onCheckedChange={(checked) => handleToggleSecuritySetting('login_notifications', checked)}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                </React.Fragment>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="notifications" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Notification Preferences</CardTitle>
+              <CardDescription>Manage how you receive notifications</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="notifications" className="flex flex-col space-y-1">
+                  <span>Enable Notifications</span>
+                  <span className="text-sm text-muted-foreground">
+                    Receive notifications for important events
+                  </span>
+                </Label>
+                <Switch 
+                  id="notifications" 
+                  checked={notifications} 
+                  onCheckedChange={setNotifications} 
+                />
+              </div>
+              
+              <div className="pt-4">
+                <Button onClick={saveSettings} disabled={loading}>
+                  {loading ? 'Saving...' : 'Save Settings'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
