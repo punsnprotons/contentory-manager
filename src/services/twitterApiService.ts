@@ -425,6 +425,9 @@ export class TwitterApiService {
         throw new Error(response.error?.message || 'Failed to initialize Twitter authentication');
       }
       
+      // Set up a message listener to handle the callback from the popup window
+      this.setupAuthMessageListener();
+      
       console.log("TwitterApiService: Successfully generated auth URL:", response.data.authURL);
       return response.data.authURL;
     } catch (error) {
@@ -432,6 +435,65 @@ export class TwitterApiService {
       throw error;
     }
   }
+  
+  /**
+   * Set up a message listener to handle the callback from Twitter
+   */
+  private setupAuthMessageListener() {
+    console.log("TwitterApiService: Setting up auth message listener");
+    
+    // Remove any existing listeners to avoid duplicates
+    window.removeEventListener('message', this.handleAuthMessage);
+    
+    // Add the message listener
+    window.addEventListener('message', this.handleAuthMessage);
+    
+    console.log("TwitterApiService: Auth message listener set up");
+  }
+  
+  /**
+   * Handle the message sent from the popup window
+   */
+  private handleAuthMessage = async (event: MessageEvent) => {
+    console.log("TwitterApiService: Received message:", event);
+    
+    if (event.data && event.data.type === 'TWITTER_AUTH_SUCCESS') {
+      console.log("TwitterApiService: Received successful auth callback:", event.data);
+      
+      try {
+        // Store the connection in the database
+        const { error } = await supabase
+          .from('platform_connections')
+          .upsert({
+            user_id: this.userId,
+            platform: 'twitter',
+            connected: true,
+            username: 'twitter_user', // This should be updated with the actual username
+            access_token: event.data.data.token,
+            updated_at: new Date().toISOString()
+          });
+          
+        if (error) {
+          console.error("TwitterApiService: Error storing Twitter connection:", error);
+          toast.error("Failed to store Twitter connection");
+        } else {
+          console.log("TwitterApiService: Successfully stored Twitter connection");
+          toast.success("Successfully connected to Twitter");
+          
+          // Reload the profile data
+          this.fetchProfileData().catch(err => {
+            console.error("Error fetching profile data after connection:", err);
+          });
+        }
+      } catch (error) {
+        console.error("TwitterApiService: Error handling auth success:", error);
+        toast.error("Failed to complete Twitter authentication");
+      }
+      
+      // Remove the listener since we're done with it
+      window.removeEventListener('message', this.handleAuthMessage);
+    }
+  };
 
   /**
    * Factory method to create and initialize a TwitterApiService

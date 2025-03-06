@@ -10,55 +10,113 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { TwitterApiService } from '@/services/twitterApiService';
 import { toast } from 'sonner';
-import { PlusCircle, Twitter, Instagram, CheckCircle, AlertCircle } from 'lucide-react';
+import { PlusCircle, Twitter, Instagram, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+
+// Define the proper type for platform
+type SocialPlatform = 'twitter' | 'instagram';
+
+// Define the type for connection
+interface Connection {
+  platform: SocialPlatform;
+  connected: boolean;
+  username?: string;
+}
 
 const Settings = () => {
   const [loading, setLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [notifications, setNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
-  const [connections, setConnections] = useState<{platform: string, connected: boolean, username?: string}[]>([]);
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { session } = useAuth();
   
   useEffect(() => {
     if (session?.user) {
-      loadUserSettings();
-      loadConnections();
+      console.log("Settings: Session user available, loading settings", session.user);
+      setPageLoading(true);
+      setError(null);
+      
+      Promise.all([
+        loadUserSettings(),
+        loadConnections()
+      ])
+      .catch(err => {
+        console.error("Error initializing settings page:", err);
+        setError("Failed to load settings. Please try again.");
+      })
+      .finally(() => {
+        setPageLoading(false);
+      });
+    } else {
+      console.log("Settings: No user session available");
+      setPageLoading(false);
+      // Set default values even if there's no session
+      setConnections([
+        { platform: 'twitter', connected: false },
+        { platform: 'instagram', connected: false }
+      ]);
     }
   }, [session]);
 
   const loadUserSettings = async () => {
     try {
+      console.log("Settings: Loading user settings");
       const { data, error } = await supabase
         .from('user_settings')
         .select('*')
         .eq('user_id', session?.user.id)
         .single();
         
-      if (error) throw error;
+      if (error) {
+        // If the error is that no rows were returned, just use defaults
+        if (error.code === 'PGRST116') {
+          console.log("Settings: No user settings found, using defaults");
+          return;
+        }
+        
+        console.error('Error loading user settings:', error);
+        throw error;
+      }
       
       if (data) {
+        console.log("Settings: User settings loaded", data);
         setNotifications(data.enable_notifications);
         setDarkMode(data.theme === 'dark');
       }
     } catch (error) {
       console.error('Error loading user settings:', error);
+      toast.error("Failed to load user settings");
+      // Continue with default values
     }
   };
   
   const loadConnections = async () => {
     try {
+      console.log("Settings: Loading connections");
       const { data, error } = await supabase
         .from('platform_connections')
         .select('platform, connected, username')
         .eq('user_id', session?.user.id);
         
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading connections:', error);
+        throw error;
+      }
       
       if (data && data.length > 0) {
-        setConnections(data);
+        console.log("Settings: Connections loaded", data);
+        // Cast the data to the correct type
+        const typedConnections = data.map(conn => ({
+          ...conn,
+          platform: conn.platform as SocialPlatform
+        }));
+        
+        setConnections(typedConnections);
       } else {
         // Default connections if none found
+        console.log("Settings: No connections found, using defaults");
         setConnections([
           { platform: 'twitter', connected: false },
           { platform: 'instagram', connected: false }
@@ -66,22 +124,38 @@ const Settings = () => {
       }
     } catch (error) {
       console.error('Error loading connections:', error);
+      toast.error("Failed to load social media connections");
+      // Set default connections on error
+      setConnections([
+        { platform: 'twitter', connected: false },
+        { platform: 'instagram', connected: false }
+      ]);
     }
   };
   
   const saveSettings = async () => {
+    if (!session?.user) {
+      toast.error("You must be logged in to save settings");
+      return;
+    }
+    
     setLoading(true);
     try {
+      console.log("Settings: Saving user settings");
       const { error } = await supabase
         .from('user_settings')
         .upsert({
-          user_id: session?.user.id,
+          user_id: session.user.id,
           enable_notifications: notifications,
           theme: darkMode ? 'dark' : 'light'
         });
         
-      if (error) throw error;
+      if (error) {
+        console.error('Error saving settings:', error);
+        throw error;
+      }
       
+      console.log("Settings: Settings saved successfully");
       toast.success('Settings saved successfully');
     } catch (error) {
       console.error('Error saving settings:', error);
@@ -99,15 +173,25 @@ const Settings = () => {
     
     setLoading(true);
     try {
+      console.log("Settings: Connecting Twitter");
       const twitterService = new TwitterApiService(session.user.id);
       const authURL = await twitterService.initiateAuth();
       
+      console.log("Settings: Opening Twitter auth URL:", authURL);
       // Open Twitter auth in a new window
-      window.open(authURL, '_blank', 'width=600,height=600');
+      const authWindow = window.open(authURL, '_blank', 'width=600,height=600');
+      
+      if (!authWindow) {
+        console.error("Settings: Failed to open Twitter auth window");
+        throw new Error("Failed to open popup window. Please disable popup blockers and try again.");
+      }
+      
       toast.info('Please complete authentication in the opened window');
+      
+      // The rest of the flow is handled by the message listener in TwitterApiService
     } catch (error) {
       console.error('Error connecting Twitter:', error);
-      toast.error('Failed to connect Twitter');
+      toast.error(error instanceof Error ? error.message : 'Failed to connect Twitter');
     } finally {
       setLoading(false);
     }
@@ -121,6 +205,7 @@ const Settings = () => {
     
     setImportLoading(true);
     try {
+      console.log("Settings: Importing Twitter tweets");
       // Create and initialize Twitter service
       const twitterService = await TwitterApiService.create(session);
       
@@ -131,6 +216,7 @@ const Settings = () => {
       // Fetch and store tweets
       const result = await twitterService.fetchUserTweets(50);
       
+      console.log("Settings: Import result", result);
       if (result && Array.isArray(result)) {
         toast.success(`Successfully imported ${result.length} tweets from Twitter`);
       } else {
@@ -138,7 +224,7 @@ const Settings = () => {
       }
       
       // Refresh connections to show updated status
-      loadConnections();
+      await loadConnections();
     } catch (error) {
       console.error('Error importing tweets:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to import tweets');
@@ -146,6 +232,42 @@ const Settings = () => {
       setImportLoading(false);
     }
   };
+
+  // If page is loading, show loading indicator
+  if (pageLoading) {
+    return (
+      <div className="container mx-auto py-6 flex justify-center items-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-lg">Loading settings...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If there's an error, show error message
+  if (error) {
+    return (
+      <div className="container mx-auto py-6 space-y-8">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+        </div>
+        
+        <Card className="border-destructive">
+          <CardContent className="p-6">
+            <div className="flex flex-col items-center gap-4 text-center">
+              <AlertCircle className="h-10 w-10 text-destructive" />
+              <h2 className="text-xl font-semibold">Error Loading Settings</h2>
+              <p>{error}</p>
+              <Button onClick={() => window.location.reload()} variant="outline">
+                Retry
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto py-6 space-y-8">
@@ -223,10 +345,17 @@ const Settings = () => {
                           <Button 
                             variant="outline" 
                             size="sm"
-                            onClick={importTwitterTweets}
+                            onClick={connection.platform === 'twitter' ? importTwitterTweets : undefined}
                             disabled={importLoading || connection.platform !== 'twitter'}
                           >
-                            {importLoading ? 'Importing...' : 'Import Posts'}
+                            {importLoading ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Importing...
+                              </>
+                            ) : (
+                              'Import Posts'
+                            )}
                           </Button>
                           <CheckCircle className="h-5 w-5 text-green-500" />
                         </>
@@ -237,8 +366,17 @@ const Settings = () => {
                           onClick={connection.platform === 'twitter' ? connectTwitter : undefined}
                           disabled={loading || connection.platform !== 'twitter'}
                         >
-                          <PlusCircle className="h-4 w-4 mr-2" />
-                          Connect
+                          {loading && connection.platform === 'twitter' ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Connecting...
+                            </>
+                          ) : (
+                            <>
+                              <PlusCircle className="h-4 w-4 mr-2" />
+                              Connect
+                            </>
+                          )}
                         </Button>
                       )}
                     </div>

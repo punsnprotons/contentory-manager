@@ -6,7 +6,7 @@ const API_KEY = Deno.env.get("TWITTER_API_KEY")?.trim();
 const API_SECRET = Deno.env.get("TWITTER_API_SECRET")?.trim();
 const ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
 const ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")?.trim();
-const CALLBACK_URL = "https://fxzamjowvpnyuxthusib.supabase.co/auth/v1/callback";
+const CALLBACK_URL = Deno.env.get("TWITTER_CALLBACK_URL")?.trim() || "https://fxzamjowvpnyuxthusib.supabase.co/functions/v1/twitter-integration/callback";
 
 // CORS headers for browser requests
 const corsHeaders = {
@@ -118,8 +118,8 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
   const requestTokenURL = 'https://api.twitter.com/oauth/request_token';
   const method = 'POST';
   
-  // Important: The callback URL must be included in the OAuth parameters
-  // but not in the body of the request
+  // CRITICAL FIX: Don't double-encode the callback URL
+  // The callback URL should be properly encoded just once in the OAuth parameters
   const oauthParams: Record<string, string> = {
     oauth_callback: CALLBACK_URL
   };
@@ -184,6 +184,28 @@ async function generateTwitterAuthURL(): Promise<string> {
     console.error("Error generating auth URL:", error);
     throw error;
   }
+}
+
+// Handle the Twitter callback
+async function handleCallback(url: URL): Promise<any> {
+  const oauth_token = url.searchParams.get("oauth_token");
+  const oauth_verifier = url.searchParams.get("oauth_verifier");
+  
+  if (!oauth_token || !oauth_verifier) {
+    throw new Error("Missing oauth_token or oauth_verifier in callback");
+  }
+  
+  console.log("Received callback with token:", oauth_token, "and verifier:", oauth_verifier);
+  
+  // Now we need to exchange these for an access token
+  // This is where you would typically store the tokens in your database for the user
+  
+  // For testing purposes, redirect to a success page
+  return {
+    success: true,
+    token: oauth_token,
+    message: "Successfully authenticated with Twitter"
+  };
 }
 
 // Twitter API v2 base URL
@@ -389,7 +411,24 @@ serve(async (req) => {
     const url = new URL(req.url);
     const endpoint = url.pathname.split('/').pop() || '';
     
-    console.log(`Processing request for endpoint: ${endpoint}, method: ${req.method}`);
+    console.log(`Processing request for endpoint: ${endpoint}, method: ${req.method}, URL: ${req.url}`);
+    
+    // Handle the callback from Twitter
+    if (endpoint === 'callback' || url.pathname.includes('/callback')) {
+      console.log("Handling Twitter callback");
+      const result = await handleCallback(url);
+      
+      // Redirect back to the application with success
+      return new Response(
+        `<html><body><script>window.opener.postMessage({type: "TWITTER_AUTH_SUCCESS", data: ${JSON.stringify(result)}}, "*"); window.close();</script></body></html>`,
+        { 
+          headers: { 
+            ...corsHeaders,
+            "Content-Type": "text/html"
+          }
+        }
+      );
+    }
     
     // For POST requests, parse the JSON body
     let body = {};
@@ -457,7 +496,8 @@ serve(async (req) => {
           "/user": "Get user profile",
           "/profile": "Get detailed profile with follower metrics",
           "/tweets": "Get user tweets",
-          "/auth": "Initiate OAuth flow"
+          "/auth": "Initiate OAuth flow",
+          "/callback": "Handle Twitter OAuth callback"
         },
         message: "Twitter Integration API"
       };
