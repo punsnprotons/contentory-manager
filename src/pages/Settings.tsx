@@ -495,9 +495,10 @@ const Settings: React.FC = () => {
       }
       
       console.log("Settings: User profile ID:", userProfile?.id);
+      console.log("Settings: Auth ID from session:", session?.user?.id);
       
-      if (!userProfile?.id) {
-        console.error("Settings: No user profile ID available");
+      if (!session?.user?.id) {
+        console.error("Settings: No user ID available from session");
         toast({
           title: "User Profile Missing",
           description: "Cannot fetch Twitter profile without a user ID.",
@@ -508,8 +509,10 @@ const Settings: React.FC = () => {
       
       setIsLoadingProfile(true);
       
-      console.log("Settings: Verifying service initialization for user ID:", userProfile.id);
-      const initResult = await TwitterApiService.verifyServiceInitialization(userProfile.id);
+      const authId = session.user.id;
+      console.log("Settings: Verifying service initialization for auth ID:", authId);
+      
+      const initResult = await TwitterApiService.verifyServiceInitialization(authId);
       console.log("Settings: Service initialization result:", initResult);
       
       if (!initResult.success) {
@@ -523,12 +526,9 @@ const Settings: React.FC = () => {
         return;
       }
       
-      console.log("Settings: Creating Twitter service with session:", !!session);
-      let service;
-      if (session) {
-        service = await TwitterApiService.create(session);
-        console.log("Settings: Service created:", !!service);
-      }
+      console.log("Settings: Creating Twitter service with session");
+      const service = await TwitterApiService.create(session);
+      console.log("Settings: Service created:", !!service);
       
       if (!service) {
         console.error("Settings: Failed to create Twitter service");

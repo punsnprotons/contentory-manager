@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 
@@ -22,8 +23,8 @@ export class TwitterApiService {
   async initialize(): Promise<TwitterApiService> {
     console.log(`TwitterApiService: Initializing service for userId: ${this.userId}`);
     
-    // Get user's Twitter connection from the database
-    const { data: connection, error } = await supabase
+    // First try to get user's Twitter connection using the auth_id directly
+    let { data: connection, error } = await supabase
       .from('platform_connections')
       .select('*')
       .eq('user_id', this.userId)
@@ -31,7 +32,39 @@ export class TwitterApiService {
       .eq('connected', true)
       .single();
     
-    console.log(`TwitterApiService: Query results - connection:`, connection, "error:", error);
+    console.log(`TwitterApiService: Query results using direct ID - connection:`, connection, "error:", error);
+    
+    // If no connection found with direct ID, try to find the user record first
+    if (error || !connection) {
+      console.log(`TwitterApiService: No connection found with direct ID, trying to find user record first`);
+      
+      // Get the user record to find the actual user_id
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_id', this.userId)
+        .single();
+      
+      console.log(`TwitterApiService: User lookup results:`, user, "error:", userError);
+      
+      if (user && !userError) {
+        // Now try again with the actual user_id from the users table
+        const { data: retryConnection, error: retryError } = await supabase
+          .from('platform_connections')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('platform', 'twitter')
+          .eq('connected', true)
+          .single();
+        
+        console.log(`TwitterApiService: Retry query results with user.id - connection:`, retryConnection, "error:", retryError);
+        
+        if (retryConnection && !retryError) {
+          connection = retryConnection;
+          error = null;
+        }
+      }
+    }
     
     if (error || !connection) {
       this.isInitialized = false;
