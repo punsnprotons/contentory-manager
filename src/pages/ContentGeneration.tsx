@@ -7,12 +7,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ContentType, ContentIntent, SocialPlatform } from "@/types";
 import ContentCard from "@/components/ui/ContentCard";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useGenerateContent } from "@/hooks/useGenerateContent";
 import ScheduleDialog from "@/components/ui/ScheduleDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { publishToTwitter } from "@/components/ui/RefreshDataButton";
 
 const ContentGeneration: React.FC = () => {
   const [selectedContentType, setSelectedContentType] = useState<ContentType>("text");
@@ -117,6 +118,18 @@ const ContentGeneration: React.FC = () => {
     
     try {
       console.log("Publishing content with user:", user?.id);
+      
+      if (selectedPlatform === 'twitter') {
+        toast.loading('Publishing to Twitter...');
+        const twitterResult = await publishToTwitter(generatedContent, mediaUrl);
+        
+        if (!twitterResult.success) {
+          toast.error(twitterResult.message);
+          return;
+        }
+        
+        toast.success('Successfully published to Twitter!');
+      }
       
       if (!contentId) {
         const id = await saveContent({

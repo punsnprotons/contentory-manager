@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
@@ -21,7 +20,6 @@ interface RefreshResponse {
 
 export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Promise<RefreshResponse> => {
   try {
-    // Get the current user
     const user = await getCurrentUser();
     
     if (!user) {
@@ -32,7 +30,6 @@ export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Pro
       };
     }
     
-    // Get the user's database ID first
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select('id')
@@ -48,7 +45,6 @@ export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Pro
       };
     }
     
-    // Call the twitter-refresh edge function
     const { data, error } = await supabase.functions.invoke('twitter-refresh', {
       method: 'POST',
       body: { userId: userData.id },
@@ -60,7 +56,6 @@ export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Pro
     if (error) {
       console.error('Error refreshing Twitter data:', error);
       
-      // Implement retry logic for network errors
       if (retryCount < maxRetries) {
         console.log(`Retrying Twitter refresh (${retryCount + 1}/${maxRetries})...`);
         return triggerTwitterRefresh(retryCount + 1, maxRetries);
@@ -73,10 +68,8 @@ export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Pro
       };
     }
     
-    // Verify that data was actually updated in the database
     const verifyDataUpdate = async () => {
       try {
-        // Check for recent updates in follower_metrics
         const nowTimestamp = new Date().toISOString();
         const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
         
@@ -117,7 +110,6 @@ export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Pro
   } catch (error) {
     console.error('Unexpected error during Twitter refresh:', error);
     
-    // Retry on unexpected errors as well
     if (retryCount < maxRetries) {
       console.log(`Retrying Twitter refresh (${retryCount + 1}/${maxRetries})...`);
       return triggerTwitterRefresh(retryCount + 1, maxRetries);
@@ -126,6 +118,54 @@ export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Pro
     return {
       success: false,
       message: 'An unexpected error occurred after multiple attempts',
+      error
+    };
+  }
+};
+
+export const publishToTwitter = async (content: string, mediaUrl?: string): Promise<{ success: boolean; message: string; data?: any }> => {
+  try {
+    const user = await getCurrentUser();
+    
+    if (!user) {
+      toast.error('You need to be logged in to publish to Twitter');
+      return {
+        success: false,
+        message: 'User not authenticated'
+      };
+    }
+    
+    const { data, error } = await supabase.functions.invoke('twitter-api', {
+      method: 'POST',
+      body: { 
+        content, 
+        mediaUrl 
+      },
+      headers: {
+        Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+        path: '/tweet'
+      }
+    });
+    
+    if (error) {
+      console.error('Error publishing to Twitter:', error);
+      return {
+        success: false,
+        message: 'Failed to publish to Twitter',
+        error
+      };
+    }
+    
+    return {
+      success: true,
+      message: 'Content published successfully to Twitter',
+      data
+    };
+  } catch (error) {
+    console.error('Unexpected error during Twitter publish:', error);
+    return {
+      success: false,
+      message: 'An unexpected error occurred while publishing to Twitter',
       error
     };
   }
@@ -153,7 +193,6 @@ const RefreshDataButton: React.FC<RefreshDataButtonProps> = ({
       },
       error: (err: Error | { message?: string } | unknown) => {
         setIsRefreshing(false);
-        // Handle different error types safely
         const errorMessage = err instanceof Error ? err.message : 
                              typeof err === 'object' && err !== null && 'message' in err ? 
                              (err as { message: string }).message : 
