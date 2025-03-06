@@ -1,4 +1,3 @@
-
 import { createHmac } from "node:crypto";
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
@@ -114,15 +113,23 @@ function generateOAuthHeader(
 }
 
 // Request a temporary token from Twitter
-async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_secret: string }> {
+async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_secret: string, oauth_callback_confirmed: string }> {
   // Use the v1.1 OAuth endpoints which are still operational
   const requestTokenURL = 'https://api.twitter.com/oauth/request_token';
   const method = 'POST';
   
+  // Generate a random state
+  const state = Math.random().toString(36).substring(2);
+  
+  // Store state in a cookie or session (for this example we'll add it to the callback URL)
+  const callbackWithState = `${CALLBACK_URL}?state=${state}`;
+  
+  console.log("Using callback URL with state:", callbackWithState);
+  
   // CRITICAL FIX: Don't double-encode the callback URL
   // The callback URL should be properly encoded just once in the OAuth parameters
   const oauthParams: Record<string, string> = {
-    oauth_callback: CALLBACK_URL
+    oauth_callback: callbackWithState
   };
   
   // Generate authorization header
@@ -130,7 +137,6 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
   
   console.log("Requesting token with header:", authHeader);
   console.log("Request URL:", requestTokenURL);
-  console.log("Using callback URL:", CALLBACK_URL);
   
   try {
     const response = await fetch(requestTokenURL, {
@@ -164,7 +170,8 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
     
     return {
       oauth_token: responseParams.oauth_token,
-      oauth_token_secret: responseParams.oauth_token_secret
+      oauth_token_secret: responseParams.oauth_token_secret,
+      oauth_callback_confirmed: responseParams.oauth_callback_confirmed
     };
   } catch (error) {
     console.error("Error requesting token:", error);
@@ -191,10 +198,21 @@ async function generateTwitterAuthURL(): Promise<string> {
 async function handleCallback(url: URL): Promise<any> {
   const oauth_token = url.searchParams.get("oauth_token");
   const oauth_verifier = url.searchParams.get("oauth_verifier");
+  const state = url.searchParams.get("state");
+  
+  console.log("Received callback with parameters:", {
+    oauth_token,
+    oauth_verifier,
+    state
+  });
   
   if (!oauth_token || !oauth_verifier) {
     throw new Error("Missing oauth_token or oauth_verifier in callback");
   }
+  
+  // In a real implementation, you would verify the state parameter here
+  // to ensure it matches what you sent in the original request
+  // This helps prevent CSRF attacks
   
   console.log("Received callback with token:", oauth_token, "and verifier:", oauth_verifier);
   

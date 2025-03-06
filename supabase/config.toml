@@ -33,7 +33,7 @@ enabled = true
 
 [auth]
 enabled = true
-site_url = "https://fxzamjowvpnyuxthusib.supabase.co"
+site_url = "http://localhost:3000" 
 additional_redirect_urls = ["https://fxzamjowvpnyuxthusib.supabase.co", "https://fxzamjowvpnyuxthusib.supabase.co/functions/v1/twitter-integration/callback"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
