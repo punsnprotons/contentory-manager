@@ -9,6 +9,7 @@ export class TwitterApiService {
   private username?: string;
   private accessToken?: string;
   private accessTokenSecret?: string;
+  private isInitialized = false;
 
   constructor(userId: string) {
     this.userId = userId;
@@ -28,20 +29,33 @@ export class TwitterApiService {
       .single();
     
     if (error || !connection) {
+      this.isInitialized = false;
       throw new Error('No connected Twitter account found');
     }
     
     this.username = connection.username;
     this.accessToken = connection.access_token || undefined;
     this.accessTokenSecret = connection.refresh_token || undefined;
+    this.isInitialized = true;
     
     return this;
+  }
+
+  /**
+   * Checks if the service is initialized
+   */
+  isServiceInitialized(): boolean {
+    return this.isInitialized;
   }
 
   /**
    * Send a tweet
    */
   async sendTweet(text: string): Promise<any> {
+    if (!this.isInitialized) {
+      throw new Error('Twitter service not initialized');
+    }
+    
     try {
       const response = await supabase.functions.invoke('twitter-integration', {
         method: 'POST',
@@ -66,6 +80,10 @@ export class TwitterApiService {
    * Get the current user profile
    */
   async getUserProfile(): Promise<any> {
+    if (!this.isInitialized) {
+      throw new Error('Twitter service not initialized');
+    }
+    
     try {
       const response = await supabase.functions.invoke('twitter-integration', {
         method: 'POST',
@@ -87,6 +105,10 @@ export class TwitterApiService {
    * Fetch and store Twitter profile data
    */
   async fetchProfileData(): Promise<any> {
+    if (!this.isInitialized) {
+      throw new Error('Twitter service not initialized');
+    }
+    
     try {
       // Get user profile via the edge function
       const response = await supabase.functions.invoke('twitter-integration', {
@@ -188,6 +210,7 @@ export class TwitterApiService {
    */
   static async create(session: Session | null): Promise<TwitterApiService | null> {
     if (!session?.user) {
+      console.log("No session available for Twitter service creation");
       return null;
     }
     

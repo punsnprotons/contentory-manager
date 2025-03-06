@@ -474,23 +474,55 @@ const Settings: React.FC = () => {
   };
 
   const fetchTwitterProfile = async () => {
-    if (!session || !twitterService) {
-      toast({
-        title: "Service Not Available",
-        description: "Twitter service is not initialized. Please connect to Twitter first.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    setIsLoadingProfile(true);
     try {
-      const profileData = await twitterService.fetchProfileData();
+      const twitterConnection = connections.find(conn => 
+        conn.platform === 'twitter' && conn.connected === true
+      );
+      
+      if (!twitterConnection) {
+        toast({
+          title: "Not Connected",
+          description: "You haven't connected to Twitter yet. Please connect first.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      setIsLoadingProfile(true);
+      
+      const initResult = await TwitterApiService.verifyServiceInitialization(userProfile?.id || '');
+      
+      if (!initResult.success) {
+        toast({
+          title: "Service Not Available",
+          description: initResult.message || "Twitter service is not initialized properly.",
+          variant: "destructive"
+        });
+        setIsLoadingProfile(false);
+        return;
+      }
+      
+      let service;
+      if (session) {
+        service = await TwitterApiService.create(session);
+      }
+      
+      if (!service) {
+        toast({
+          title: "Service Not Available",
+          description: "Twitter service could not be initialized. Please reconnect to Twitter.",
+          variant: "destructive"
+        });
+        setIsLoadingProfile(false);
+        return;
+      }
+      
+      const profileData = await service.fetchProfileData();
       
       if (profileData) {
         toast({
           title: "Profile Data Fetched",
-          description: `Successfully retrieved and stored profile data for @${profileData.username || ''}`,
+          description: `Successfully retrieved and stored profile data for Twitter`,
         });
         
         const { data: refreshedConnections } = await supabase
