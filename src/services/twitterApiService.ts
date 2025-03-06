@@ -109,7 +109,7 @@ export class TwitterApiService {
               user_id: this.userId,
               platform: 'twitter',
               follower_count: profileData.data.public_metrics.followers_count,
-              recorded_at: new Date().toISOString().split('T')[0] // Fix: Convert Date to string in ISO format
+              recorded_at: new Date().toISOString().split('T')[0] // Convert Date to string in ISO format
             });
             
           if (followerError) {
@@ -123,7 +123,7 @@ export class TwitterApiService {
             .from('platform_connections')
             .update({
               profile_image: profileData.data.profile_image_url,
-              updated_at: new Date() // This is fine since the database handles Date objects
+              updated_at: new Date().toISOString() // Convert Date to string for updated_at field
             })
             .eq('user_id', this.userId)
             .eq('platform', 'twitter');
