@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
 import { Navigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 const Auth: React.FC = () => {
   const { user, signIn, signUp, loading } = useAuth();
@@ -18,7 +18,6 @@ const Auth: React.FC = () => {
   const [activeTab, setActiveTab] = useState('login');
   const [registrationComplete, setRegistrationComplete] = useState(false);
 
-  // If user is already logged in, redirect to dashboard
   if (user && !loading) {
     return <Navigate to="/dashboard" replace />;
   }
@@ -92,7 +91,6 @@ const Auth: React.FC = () => {
           });
         }
       } else {
-        // Even if there's no error but email confirmation is required
         setRegistrationComplete(true);
       }
     } finally {
