@@ -103,10 +103,10 @@ function generateOAuthHeader(
   // Add signature to OAuth parameters
   oauthParams.oauth_signature = signature;
   
-  // Build authorization header string
+  // Build authorization header string - FIX: use k variable from loop instead of hardcoded 'k'
   const authHeader = 'OAuth ' + Object.keys(oauthParams)
     .sort()
-    .map(key => `${encodeURIComponent(key)}="${encodeURIComponent(oauthParams[key])}"`)
+    .map(k => `${encodeURIComponent(k)}="${encodeURIComponent(oauthParams[k])}"`)
     .join(', ');
     
   console.log("Full OAuth Header:", authHeader);
