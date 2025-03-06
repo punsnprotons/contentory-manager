@@ -534,6 +534,135 @@ export class TwitterApiService {
   }
 
   /**
+   * Analyze daily engagement patterns
+   */
+  async analyzeDailyEngagement(): Promise<Record<string, number> | null> {
+    console.log(`TwitterApiService: analyzeDailyEngagement - isInitialized: ${this.isInitialized}`);
+    
+    if (!this.isInitialized) {
+      console.error("TwitterApiService: Cannot analyze daily engagement - service not initialized");
+      throw new Error('Twitter service not initialized');
+    }
+    
+    try {
+      console.log(`TwitterApiService: Analyzing daily engagement for user: ${this.userId}`);
+      
+      // Fetch tweets with their engagement data via edge function
+      const response = await supabase.functions.invoke('twitter-integration', {
+        method: 'POST',
+        body: { 
+          endpoint: 'tweets',
+          limit: 100,
+          fields: ['created_at', 'public_metrics']
+        }
+      });
+      
+      console.log("TwitterApiService: Daily engagement tweets response:", response);
+      
+      if (response.error) {
+        console.error("TwitterApiService: Error from edge function:", response.error);
+        throw new Error(response.error.message);
+      }
+      
+      const tweetsData = response.data;
+      
+      if (!tweetsData || !tweetsData.data || !Array.isArray(tweetsData.data)) {
+        console.error("TwitterApiService: Invalid response format from tweet fetch", tweetsData);
+        throw new Error('Invalid response format from tweet fetch');
+      }
+      
+      // Aggregate engagement by day of week
+      const dailyEngagement: Record<string, number> = {
+        'Sunday': 0,
+        'Monday': 0,
+        'Tuesday': 0,
+        'Wednesday': 0,
+        'Thursday': 0,
+        'Friday': 0,
+        'Saturday': 0
+      };
+      
+      const dailyCount: Record<string, number> = { ...dailyEngagement };
+      
+      for (const tweet of tweetsData.data) {
+        const date = new Date(tweet.created_at);
+        const day = date.toLocaleDateString('en-US', { weekday: 'long' });
+        
+        const engagement = 
+          (tweet.public_metrics?.like_count || 0) + 
+          (tweet.public_metrics?.reply_count || 0) + 
+          (tweet.public_metrics?.retweet_count || 0);
+        
+        dailyEngagement[day] += engagement;
+        dailyCount[day]++;
+      }
+      
+      // Calculate average engagement per day
+      const averageDailyEngagement: Record<string, number> = {};
+      for (const day in dailyEngagement) {
+        averageDailyEngagement[day] = dailyCount[day] > 0 
+          ? Math.round(dailyEngagement[day] / dailyCount[day]) 
+          : 0;
+      }
+      
+      console.log(`TwitterApiService: Calculated average daily engagement:`, averageDailyEngagement);
+      
+      // Store in database - for each day check if entry exists and update or create
+      for (const day in averageDailyEngagement) {
+        // Check if entry exists
+        const { data: existingData, error: existingError } = await supabase
+          .from('daily_engagement')
+          .select('id')
+          .eq('user_id', this.userId)
+          .eq('platform', 'twitter')
+          .eq('day_of_week', day);
+          
+        if (existingError) {
+          console.error(`TwitterApiService: Error checking existing daily engagement for ${day}:`, existingError);
+          continue; // Continue with next day
+        }
+        
+        if (!existingData || existingData.length === 0) {
+          // Create new entry
+          console.log(`TwitterApiService: Creating new daily engagement entry for ${day}`);
+          const { error: insertError } = await supabase
+            .from('daily_engagement')
+            .insert({
+              user_id: this.userId,
+              platform: 'twitter',
+              day_of_week: day,
+              engagement_count: averageDailyEngagement[day]
+            });
+            
+          if (insertError) {
+            console.error(`TwitterApiService: Error inserting daily engagement for ${day}:`, insertError);
+          }
+        } else {
+          // Update existing entry
+          console.log(`TwitterApiService: Updating existing daily engagement entry for ${day}`);
+          const { error: updateError } = await supabase
+            .from('daily_engagement')
+            .update({
+              engagement_count: averageDailyEngagement[day],
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingData[0].id);
+            
+          if (updateError) {
+            console.error(`TwitterApiService: Error updating daily engagement for ${day}:`, updateError);
+          }
+        }
+      }
+      
+      console.log("TwitterApiService: Successfully analyzed and stored daily engagement");
+      return averageDailyEngagement;
+    } catch (error) {
+      console.error('TwitterApiService: Error analyzing daily engagement:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Manually trigger tweet fetching and import
    * This can be called from a settings page
    */
