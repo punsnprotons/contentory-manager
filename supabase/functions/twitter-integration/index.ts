@@ -95,6 +95,40 @@ function generateOAuthHeader(method: string, url: string): string {
   );
 }
 
+// Generate Twitter OAuth authorization URL
+function generateTwitterAuthURL(): string {
+  const requestTokenURL = "https://api.twitter.com/oauth/request_token";
+  const method = "POST";
+  const oauthParams = {
+    oauth_callback: encodeURIComponent(CALLBACK_URL!),
+    oauth_consumer_key: API_KEY!,
+    oauth_nonce: Math.random().toString(36).substring(2),
+    oauth_signature_method: "HMAC-SHA1",
+    oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
+    oauth_version: "1.0",
+  };
+
+  const signature = generateOAuthSignature(
+    method,
+    requestTokenURL,
+    oauthParams,
+    API_SECRET!,
+    ''  // Empty token secret for request token
+  );
+
+  const signedOAuthParams = {
+    ...oauthParams,
+    oauth_signature: signature,
+  };
+
+  const authHeader = "OAuth " + 
+    Object.entries(signedOAuthParams)
+      .map(([k, v]) => `${encodeURIComponent(k)}="${encodeURIComponent(v)}"`)
+      .join(", ");
+
+  return `https://api.twitter.com/oauth/authenticate?oauth_token=${requestTokenURL}`;
+}
+
 const BASE_URL = "https://api.x.com/2";
 
 // Get current Twitter user profile
@@ -173,6 +207,24 @@ async function verifyCredentials(): Promise<any> {
   }
 }
 
+// Initiate OAuth authentication flow
+async function initiateOAuth(): Promise<any> {
+  try {
+    const authURL = generateTwitterAuthURL();
+    return {
+      success: true,
+      authURL,
+      message: "Twitter authentication URL generated"
+    };
+  } catch (error) {
+    console.error("Error generating Twitter authentication URL:", error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Unknown error generating authentication URL"
+    };
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -182,9 +234,9 @@ serve(async (req) => {
   try {
     validateEnvironmentVariables();
     
-    // Get the endpoint from the URL
-    const url = new URL(req.url);
-    const endpoint = url.pathname.split('/').pop();
+    // Get the endpoint from the URL or request body
+    const body = await req.json().catch(() => ({}));
+    const endpoint = body.endpoint || new URL(req.url).pathname.split('/').pop();
     
     if (endpoint === 'verify') {
       // Verify Twitter credentials
@@ -194,7 +246,6 @@ serve(async (req) => {
       });
     } else if (endpoint === 'tweet') {
       // Send a tweet
-      const body = await req.json();
       if (!body.text) {
         return new Response(JSON.stringify({ error: "Missing tweet text" }), {
           status: 400,
@@ -210,6 +261,12 @@ serve(async (req) => {
       // Get user profile
       const user = await getUser();
       return new Response(JSON.stringify(user), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } else if (endpoint === 'auth') {
+      // Initiate OAuth flow
+      const result = await initiateOAuth();
+      return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } else {

@@ -61,6 +61,7 @@ const Settings: React.FC = () => {
     confirm: ''
   });
   const [isVerifyingTwitter, setIsVerifyingTwitter] = useState(false);
+  const [isConnectingTwitter, setIsConnectingTwitter] = useState(false);
 
   useEffect(() => {
     async function fetchUserData() {
@@ -313,6 +314,35 @@ const Settings: React.FC = () => {
     }
   };
 
+  const initiateTwitterAuth = async () => {
+    setIsConnectingTwitter(true);
+    try {
+      const response = await supabase.functions.invoke('twitter-integration', {
+        method: 'GET',
+        body: { endpoint: 'auth' }
+      });
+      
+      if (response.data?.success && response.data?.authURL) {
+        window.location.href = response.data.authURL;
+      } else {
+        toast({
+          title: "Authentication Failed",
+          description: response.data?.message || "Could not initiate Twitter authentication",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error initiating Twitter authentication:', error);
+      toast({
+        title: "Authentication Error",
+        description: "An error occurred while initiating Twitter authentication. Check console for details.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsConnectingTwitter(false);
+    }
+  };
+
   const handleTestTweet = async () => {
     try {
       const { data, error } = await supabase.functions.invoke('twitter-integration', {
@@ -562,13 +592,32 @@ const Settings: React.FC = () => {
                       </Button>
                       
                       <Button 
-                        onClick={handleTestTweet}
+                        onClick={initiateTwitterAuth}
+                        disabled={isConnectingTwitter}
                         variant="outline"
                         className="flex-1"
                       >
-                        Send Test Tweet
+                        {isConnectingTwitter ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Connecting...
+                          </>
+                        ) : (
+                          <>
+                            <Twitter className="mr-2 h-4 w-4" />
+                            Connect with Twitter
+                          </>
+                        )}
                       </Button>
                     </div>
+                    
+                    <Button 
+                      onClick={handleTestTweet}
+                      variant="outline"
+                      className="w-full"
+                    >
+                      Send Test Tweet
+                    </Button>
                   </CardContent>
                 </Card>
                 
