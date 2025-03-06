@@ -123,7 +123,7 @@ export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Pro
   }
 };
 
-export const publishToTwitter = async (content: string, mediaUrl?: string): Promise<{ success: boolean; message: string; data?: any }> => {
+export const publishToTwitter = async (content: string, mediaUrl?: string): Promise<RefreshResponse> => {
   try {
     const user = await getCurrentUser();
     

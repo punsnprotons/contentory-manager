@@ -37,10 +37,8 @@ const ContentGeneration: React.FC = () => {
 
   const checkAuth = async () => {
     if (!user) {
-      toast({
-        title: "Authentication required",
-        description: "You need to be logged in to save or publish content.",
-        variant: "destructive",
+      toast.error("Authentication required", {
+        description: "You need to be logged in to save or publish content."
       });
       navigate('/auth');
       return false;
@@ -50,10 +48,8 @@ const ContentGeneration: React.FC = () => {
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
-      toast({
-        title: "Missing information",
-        description: "Please enter a prompt to generate content.",
-        variant: "destructive",
+      toast.error("Missing information", {
+        description: "Please enter a prompt to generate content."
       });
       return;
     }
@@ -70,16 +66,13 @@ const ContentGeneration: React.FC = () => {
       setMediaUrl(result.mediaUrl);
       setContentId(null); // Reset content ID when new content is generated
       
-      toast({
-        title: "Content generated",
-        description: "Your content has been successfully generated!",
+      toast.success("Content generated", {
+        description: "Your content has been successfully generated!"
       });
     } catch (error) {
       console.error("Error generating content:", error);
-      toast({
-        title: "Generation failed",
-        description: error instanceof Error ? error.message : "An unexpected error occurred.",
-        variant: "destructive",
+      toast.error("Generation failed", {
+        description: error instanceof Error ? error.message : "An unexpected error occurred."
       });
     }
   };
@@ -99,16 +92,13 @@ const ContentGeneration: React.FC = () => {
       
       setContentId(id);
       
-      toast({
-        title: "Draft saved",
-        description: "Your content has been saved as a draft.",
+      toast.success("Draft saved", {
+        description: "Your content has been saved as a draft."
       });
     } catch (error) {
       console.error("Error saving draft:", error);
-      toast({
-        title: "Saving failed",
-        description: error instanceof Error ? error.message : "An unexpected error occurred.",
-        variant: "destructive",
+      toast.error("Saving failed", {
+        description: error instanceof Error ? error.message : "An unexpected error occurred."
       });
     }
   };
@@ -145,18 +135,15 @@ const ContentGeneration: React.FC = () => {
         await publishContent(contentId);
       }
       
-      toast({
-        title: "Content published",
-        description: "Your content has been successfully published!",
+      toast.success("Content published", {
+        description: "Your content has been successfully published!"
       });
       
       navigate("/pending-content");
     } catch (error) {
       console.error("Error publishing content:", error);
-      toast({
-        title: "Publishing failed",
-        description: error instanceof Error ? error.message : "An unexpected error occurred.",
-        variant: "destructive",
+      toast.error("Publishing failed", {
+        description: error instanceof Error ? error.message : "An unexpected error occurred."
       });
     }
   };
@@ -187,18 +174,15 @@ const ContentGeneration: React.FC = () => {
       
       setIsScheduleDialogOpen(false);
       
-      toast({
-        title: "Content scheduled",
-        description: `Your content has been scheduled for ${scheduledDate.toLocaleString()}.`,
+      toast.success("Content scheduled", {
+        description: `Your content has been scheduled for ${scheduledDate.toLocaleString()}.`
       });
       
       navigate("/content-calendar");
     } catch (error) {
       console.error("Error scheduling content:", error);
-      toast({
-        title: "Scheduling failed",
-        description: error instanceof Error ? error.message : "An unexpected error occurred.",
-        variant: "destructive",
+      toast.error("Scheduling failed", {
+        description: error instanceof Error ? error.message : "An unexpected error occurred."
       });
     }
   };
