@@ -67,6 +67,7 @@ const Settings: React.FC = () => {
   const [isConnectingTwitter, setIsConnectingTwitter] = useState(false);
   const [twitterService, setTwitterService] = useState<TwitterApiService | null>(null);
   const [isVerifyingInitialization, setIsVerifyingInitialization] = useState(false);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
 
   useEffect(() => {
     async function loadTwitterService() {
@@ -472,6 +473,52 @@ const Settings: React.FC = () => {
     }
   };
 
+  const fetchTwitterProfile = async () => {
+    if (!session || !twitterService) {
+      toast({
+        title: "Service Not Available",
+        description: "Twitter service is not initialized. Please connect to Twitter first.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setIsLoadingProfile(true);
+    try {
+      const profileData = await twitterService.fetchProfileData();
+      
+      if (profileData) {
+        toast({
+          title: "Profile Data Fetched",
+          description: `Successfully retrieved and stored profile data for @${profileData.username || ''}`,
+        });
+        
+        const { data: refreshedConnections } = await supabase
+          .from('platform_connections')
+          .select('*');
+          
+        if (refreshedConnections) {
+          setConnections(refreshedConnections);
+        }
+      } else {
+        toast({
+          title: "Fetch Failed",
+          description: "Could not fetch profile data. Check logs for details.",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching Twitter profile data:', error);
+      toast({
+        title: "Profile Data Error",
+        description: error instanceof Error ? error.message : "An error occurred while fetching profile data.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  };
+
   if (isLoading) {
     return <div className="container-page flex items-center justify-center min-h-[50vh]">
       <div className="text-xl font-medium">Loading settings...</div>
@@ -725,6 +772,27 @@ const Settings: React.FC = () => {
                           Send Test Tweet
                         </Button>
                         
+                        <Button 
+                          onClick={fetchTwitterProfile}
+                          variant="outline"
+                          disabled={isLoadingProfile}
+                          className="flex-1"
+                        >
+                          {isLoadingProfile ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Fetching Profile...
+                            </>
+                          ) : (
+                            <>
+                              <User className="mr-2 h-4 w-4" />
+                              Fetch Profile Data
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      
+                      <div className="flex space-x-2">
                         <Button 
                           onClick={verifyServiceInitialization}
                           variant="outline"

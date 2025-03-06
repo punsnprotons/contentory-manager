@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 
@@ -79,6 +80,64 @@ export class TwitterApiService {
       return response.data;
     } catch (error) {
       console.error('Error getting user profile:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch and store Twitter profile data
+   */
+  async fetchProfileData(): Promise<any> {
+    try {
+      // Get user profile via the edge function
+      const response = await supabase.functions.invoke('twitter-integration', {
+        method: 'POST',
+        body: { endpoint: 'profile' }
+      });
+      
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+      
+      const profileData = response.data;
+      
+      if (profileData && profileData.data) {
+        // Store follower count in the database
+        if (profileData.data.public_metrics && profileData.data.public_metrics.followers_count) {
+          const { error: followerError } = await supabase
+            .from('follower_metrics')
+            .insert({
+              user_id: this.userId,
+              platform: 'twitter',
+              follower_count: profileData.data.public_metrics.followers_count,
+              recorded_at: new Date().toISOString().split('T')[0]
+            });
+            
+          if (followerError) {
+            console.error('Error storing follower metrics:', followerError);
+          }
+        }
+        
+        // Update platform connection with profile image if available
+        if (profileData.data.profile_image_url) {
+          const { error: updateError } = await supabase
+            .from('platform_connections')
+            .update({
+              profile_image: profileData.data.profile_image_url,
+              updated_at: new Date()
+            })
+            .eq('user_id', this.userId)
+            .eq('platform', 'twitter');
+            
+          if (updateError) {
+            console.error('Error updating profile image:', updateError);
+          }
+        }
+      }
+      
+      return profileData.data;
+    } catch (error) {
+      console.error('Error fetching and storing Twitter profile data:', error);
       throw error;
     }
   }
