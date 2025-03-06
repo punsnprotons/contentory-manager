@@ -355,7 +355,7 @@ async function handleTwitterAuth(): Promise<{ success: boolean; authURL?: string
       // But for our case, we'll just say authentication is successful
       return {
         success: true,
-        authURL: `${CALLBACK_URL}?success=true&token=${ACCESS_TOKEN}&token_secret=${ACCESS_TOKEN_SECRET}` 
+        authURL: `${CALLBACK_URL}?success=true&token=${encodeURIComponent(ACCESS_TOKEN!)}&token_secret=${encodeURIComponent(ACCESS_TOKEN_SECRET!)}` 
       };
     } catch (error) {
       console.error("[TWITTER-INTEGRATION] Error verifying credentials during auth:", error);

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -79,8 +80,23 @@ const Settings = () => {
       
       if (event.data && event.data.type === 'TWITTER_AUTH_SUCCESS') {
         console.log("Settings: Auth success message received, refreshing connections");
-        loadConnections();
-        toast.success("Successfully connected to Twitter!");
+        
+        // Process the success message from the popup window
+        if (event.data.data && event.data.data.success && session?.user) {
+          // Create a TwitterApiService instance
+          const twitterService = new TwitterApiService(session.user.id);
+          
+          // Fetch profile data to get username and store the connection
+          twitterService.fetchProfileData()
+            .then(() => {
+              toast.success("Successfully connected to Twitter!");
+              loadConnections();
+            })
+            .catch(err => {
+              console.error("Error storing Twitter connection:", err);
+              toast.error("Failed to complete Twitter connection");
+            });
+        }
       }
     };
     
@@ -89,7 +105,7 @@ const Settings = () => {
     return () => {
       window.removeEventListener('message', messageHandler);
     };
-  }, []);
+  }, [session]);
 
   const loadUserSettings = async () => {
     try {

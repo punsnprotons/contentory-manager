@@ -95,25 +95,37 @@ serve(async (req) => {
     if (path === '/auth') {
       console.log('[TWITTER-API] Initializing Twitter authentication');
       try {
-        const { data, error } = await supabaseClient.functions.invoke(
-          'twitter-integration',
-          {
-            method: 'POST',
-            body: { 
-              endpoint: 'auth'
+        // Forward the request to the twitter-integration function with enhanced error handling
+        try {
+          const { data, error } = await supabaseClient.functions.invoke(
+            'twitter-integration',
+            {
+              method: 'POST',
+              body: { 
+                endpoint: 'auth'
+              }
             }
+          );
+          
+          if (error) {
+            console.error('[TWITTER-API] Error calling twitter-integration auth endpoint:', error);
+            console.error('[TWITTER-API] Full error details:', error);
+            throw new Error(`Failed to initialize Twitter authentication: ${error.message}`);
           }
-        );
+          
+          if (!data || !data.success || !data.authURL) {
+            console.error('[TWITTER-API] Invalid response from twitter-integration:', data);
+            throw new Error('Invalid response from twitter-integration function');
+          }
 
-        if (error) {
-          console.error('[TWITTER-API] Error calling twitter-integration auth endpoint:', error);
-          throw new Error(`Failed to initialize Twitter authentication: ${error.message}`);
+          console.log('[TWITTER-API] Twitter auth initialization successful, authURL received');
+          return new Response(JSON.stringify(data), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } catch (invokeError) {
+          console.error('[TWITTER-API] Error invoking twitter-integration function:', invokeError);
+          throw new Error(`Failed to invoke twitter-integration function: ${invokeError.message}`);
         }
-
-        console.log('[TWITTER-API] Twitter auth initialization result:', data);
-        return new Response(JSON.stringify(data), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
       } catch (error) {
         console.error('[TWITTER-API] Unexpected error during auth initialization:', error);
         throw error;
