@@ -1,11 +1,12 @@
 import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line, LineChart } from 'recharts';
 import ActivityHistory from '@/components/analytics/ActivityHistory';
 import PostAnalytics from '@/components/analytics/PostAnalytics';
 import RefreshDataButton from '@/components/ui/RefreshDataButton';
+import { useActivityHistory } from '@/hooks/useActivityHistory';
 
 // Mock data for demonstration
 const dashboardData = {
@@ -36,7 +37,28 @@ const dashboardData = {
   ],
 };
 
+// Sample content for PostAnalytics
+const sampleContent = {
+  id: "sample-content-1",
+  content: "Check out our latest product release! #innovation",
+  type: "text" as "text" | "image" | "video",
+  intent: "promotional" as "promotional" | "feature" | "news" | "poll",
+  platform: "twitter" as "instagram" | "twitter",
+  status: "published" as "draft" | "scheduled" | "published",
+  mediaUrl: "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7",
+  createdAt: new Date(),
+  publishedAt: new Date(),
+  metrics: {
+    likes: 245,
+    comments: 32,
+    shares: 18,
+    views: 1240
+  }
+};
+
 const Dashboard = () => {
+  const { activities } = useActivityHistory();
+  
   return (
     <div className="container py-6 space-y-6">
       <div className="flex justify-between items-center">
@@ -131,7 +153,7 @@ const Dashboard = () => {
           <Card>
             <CardHeader>
               <CardTitle>Top Performing Posts</CardTitle>
-              <CardCaption>Posts with the highest engagement</CardCaption>
+              <CardDescription>Posts with the highest engagement</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -158,10 +180,10 @@ const Dashboard = () => {
               </Table>
             </CardContent>
           </Card>
-          <PostAnalytics />
+          <PostAnalytics content={sampleContent} />
         </TabsContent>
         <TabsContent value="history">
-          <ActivityHistory />
+          <ActivityHistory activities={activities} />
         </TabsContent>
       </Tabs>
     </div>
