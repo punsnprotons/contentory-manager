@@ -11,7 +11,8 @@ const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey);
 // CORS headers for browser requests
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, path',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
 // Twitter controller functions
@@ -311,14 +312,19 @@ serve(async (req) => {
   try {
     // Parse the URL to determine the endpoint
     const url = new URL(req.url);
-    const endpoint = url.pathname.split('/').pop();
+    const path = req.headers.get('path') || url.pathname;
+    const endpoint = path.split('/').pop();
+    
+    console.log(`Request received for endpoint: ${endpoint}, method: ${req.method}, path: ${path}`);
     
     let userId = '';
     
     try {
       // Authenticate the request and get the user ID
       userId = await authenticateRequest(req);
+      console.log(`Authenticated user ID: ${userId}`);
     } catch (authError) {
+      console.error('Authentication failed:', authError.message);
       return new Response(
         JSON.stringify({ success: false, error: 'Authentication failed', message: authError.message }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -327,8 +333,22 @@ serve(async (req) => {
     
     // Handle the refresh endpoint (GET /refresh)
     if (endpoint === 'refresh' && req.method === 'GET') {
-      const result = await TwitterController.refreshUserData(userId);
+      console.log('Processing refresh request');
+      let result;
+      try {
+        result = await TwitterController.refreshUserData(userId);
+      } catch (refreshError) {
+        console.error('Error during refresh:', refreshError);
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: refreshError instanceof Error ? refreshError.message : 'Unknown error during refresh' 
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       
+      console.log('Refresh completed successfully');
       return new Response(
         JSON.stringify({ success: true, data: result }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -341,7 +361,9 @@ serve(async (req) => {
       let body;
       try {
         body = await req.json();
-      } catch (error) {
+        console.log('Received tweet request with body:', body);
+      } catch (parseError) {
+        console.error('Error parsing request body:', parseError);
         return new Response(
           JSON.stringify({ success: false, error: 'Invalid request body' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -351,14 +373,28 @@ serve(async (req) => {
       const { content, mediaUrl } = body;
       
       if (!content) {
+        console.error('Tweet request missing content');
         return new Response(
           JSON.stringify({ success: false, error: 'Tweet content is required' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
-      const result = await TwitterController.postTweet(userId, content, mediaUrl);
+      let result;
+      try {
+        result = await TwitterController.postTweet(userId, content, mediaUrl);
+      } catch (tweetError) {
+        console.error('Error posting tweet:', tweetError);
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: tweetError instanceof Error ? tweetError.message : 'Unknown error posting tweet'
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       
+      console.log('Tweet posted successfully');
       return new Response(
         JSON.stringify({ success: true, data: result }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -366,6 +402,7 @@ serve(async (req) => {
     }
     
     // If endpoint not found
+    console.error(`Endpoint not found: ${endpoint}`);
     return new Response(
       JSON.stringify({ success: false, error: 'Endpoint not found' }),
       { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -375,7 +412,10 @@ serve(async (req) => {
     console.error('Server error:', error);
     
     return new Response(
-      JSON.stringify({ success: false, error: error.message || 'An unexpected error occurred' }),
+      JSON.stringify({ 
+        success: false, 
+        error: error instanceof Error ? error.message : 'An unexpected error occurred'
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

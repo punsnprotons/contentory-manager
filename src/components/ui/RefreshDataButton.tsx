@@ -9,7 +9,7 @@ interface RefreshDataButtonProps {
   className?: string;
 }
 
-export const triggerTwitterRefresh = async () => {
+export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2) => {
   try {
     // Get the current user
     const user = await getCurrentUser();
@@ -38,20 +38,28 @@ export const triggerTwitterRefresh = async () => {
       };
     }
     
-    // Call the new twitter-api edge function to refresh Twitter data
+    // Call the twitter-api edge function to refresh Twitter data with improved timeout and retry options
     const { data, error } = await supabase.functions.invoke('twitter-api', {
       method: 'GET',
       headers: {
         path: '/refresh',
         Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
-      }
+      },
+      body: { timeout: 60000 } // Extended timeout for slow connections
     });
     
     if (error) {
       console.error('Error refreshing Twitter data:', error);
+      
+      // Implement retry logic for network errors
+      if (retryCount < maxRetries) {
+        console.log(`Retrying Twitter refresh (${retryCount + 1}/${maxRetries})...`);
+        return triggerTwitterRefresh(retryCount + 1, maxRetries);
+      }
+      
       return {
         success: false,
-        message: 'Failed to refresh Twitter data',
+        message: 'Failed to refresh Twitter data after multiple attempts',
         error
       };
     }
@@ -63,9 +71,16 @@ export const triggerTwitterRefresh = async () => {
     };
   } catch (error) {
     console.error('Unexpected error during Twitter refresh:', error);
+    
+    // Retry on unexpected errors as well
+    if (retryCount < maxRetries) {
+      console.log(`Retrying Twitter refresh (${retryCount + 1}/${maxRetries})...`);
+      return triggerTwitterRefresh(retryCount + 1, maxRetries);
+    }
+    
     return {
       success: false,
-      message: 'An unexpected error occurred',
+      message: 'An unexpected error occurred after multiple attempts',
       error
     };
   }
@@ -85,7 +100,9 @@ const RefreshDataButton: React.FC<RefreshDataButtonProps> = ({ className }) => {
       },
       error: (err) => {
         setIsRefreshing(false);
-        return `Social media refresh failed: ${err.message || 'Unknown error'}`;
+        const errorMessage = err.message || 'Unknown error';
+        console.error('Refresh error details:', err);
+        return `Social media refresh failed: ${errorMessage}`;
       }
     });
   };
