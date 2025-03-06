@@ -14,16 +14,49 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Rate limiting helpers 
-let lastRequestTime = 0;
+// Rate limiting helpers - improve the implementation
+let lastRequestTimeByIP: Record<string, Record<string, number>> = {};
 const REQUEST_RATE_LIMIT_MS = 15000; // 15 seconds between requests
+const IP_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const MAX_REQUESTS_PER_WINDOW = 5; // 5 requests per 15 minutes
 
-function checkRateLimit(): boolean {
+function checkRateLimit(ip: string, endpoint: string): boolean {
   const now = Date.now();
-  if (now - lastRequestTime < REQUEST_RATE_LIMIT_MS) {
-    return false; // Rate limited
+  
+  // Initialize rate limiting data structure for this IP if it doesn't exist
+  if (!lastRequestTimeByIP[ip]) {
+    lastRequestTimeByIP[ip] = {};
   }
-  lastRequestTime = now;
+  
+  // Initialize endpoint data for this IP if it doesn't exist
+  if (!lastRequestTimeByIP[ip][endpoint]) {
+    lastRequestTimeByIP[ip][endpoint] = {
+      lastRequest: 0,
+      requests: [],
+    };
+  }
+  
+  const ipData = lastRequestTimeByIP[ip][endpoint];
+  
+  // Check if we've made a request too recently (15 seconds)
+  if (now - ipData.lastRequest < REQUEST_RATE_LIMIT_MS) {
+    console.log(`[TWITTER-INTEGRATION] Rate limit hit for ${ip} on ${endpoint}, too frequent`);
+    return false;
+  }
+  
+  // Remove requests older than the window
+  ipData.requests = ipData.requests.filter(time => now - time < IP_RATE_LIMIT_WINDOW_MS);
+  
+  // Check if we've made too many requests in the window
+  if (ipData.requests.length >= MAX_REQUESTS_PER_WINDOW) {
+    console.log(`[TWITTER-INTEGRATION] Rate limit hit for ${ip} on ${endpoint}, too many requests`);
+    return false;
+  }
+  
+  // Update rate limiting data
+  ipData.lastRequest = now;
+  ipData.requests.push(now);
+  
   return true; // Not rate limited
 }
 
@@ -141,7 +174,7 @@ const BASE_URL = "https://api.twitter.com/2";
 // Get current user profile
 async function getUser() {
   // Check rate limit
-  if (!checkRateLimit()) {
+  if (!checkRateLimit('unknown-ip', 'get-user')) {
     console.log("[TWITTER-INTEGRATION] Rate limit hit, delaying request");
     throw new Error("Rate limit exceeded. Please try again in a few seconds.");
   }
@@ -354,16 +387,17 @@ async function verifyCredentials(): Promise<any> {
 }
 
 // Handle Twitter auth initialization
-async function handleTwitterAuth(): Promise<{ success: boolean; authURL?: string; error?: string }> {
+async function handleTwitterAuth(ip: string): Promise<{ success: boolean; authURL?: string; error?: string; rateLimited?: boolean }> {
   try {
     console.log("[TWITTER-INTEGRATION] Handling Twitter auth initialization");
     
     // Check rate limit before making API calls
-    if (!checkRateLimit()) {
+    if (!checkRateLimit(ip, 'auth')) {
       console.log("[TWITTER-INTEGRATION] Rate limit hit, returning error");
       return {
         success: false,
-        error: "Too many requests. Please try again after a few minutes."
+        error: "Too many requests. Please try again after a few minutes.",
+        rateLimited: true
       };
     }
     
@@ -451,6 +485,11 @@ serve(async (req) => {
   try {
     console.log("[TWITTER-INTEGRATION] Request received");
     
+    // Get client IP for rate limiting
+    const clientIP = req.headers.get('x-forwarded-for') || 
+                    req.headers.get('cf-connecting-ip') || 
+                    'unknown-ip';
+    
     try {
       validateEnvironmentVariables();
     } catch (error) {
@@ -494,21 +533,22 @@ serve(async (req) => {
     if (endpoint === 'auth' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'auth') {
       console.log("[TWITTER-INTEGRATION] Handling auth request");
       
-      // Check rate limit
-      if (!checkRateLimit()) {
-        return new Response(JSON.stringify({
-          success: false,
-          error: "Too many requests. Please try again after a few minutes."
-        }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      const result = await handleTwitterAuth(clientIP);
+      
+      // Set appropriate status code for rate limiting
+      const status = result.success ? 200 : 
+                    result.rateLimited ? 429 : 
+                    result.error?.includes("rate limit") ? 429 : 400;
+      
+      // Set retry-after header for rate limited responses
+      const headers = { ...corsHeaders, "Content-Type": "application/json" };
+      if (status === 429) {
+        headers["Retry-After"] = "900"; // 15 minutes in seconds
       }
       
-      const result = await handleTwitterAuth();
       return new Response(JSON.stringify(result), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: result.success ? 200 : result.error?.includes("rate limit") ? 429 : 400
+        headers: headers,
+        status: status
       });
     }
     
