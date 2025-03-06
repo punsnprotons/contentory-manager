@@ -29,6 +29,7 @@ function validateEnvironmentVariables() {
   }
   
   console.log("All Twitter API credentials are present");
+  console.log("Using callback URL:", CALLBACK_URL);
 }
 
 // Generate OAuth signature for Twitter API
