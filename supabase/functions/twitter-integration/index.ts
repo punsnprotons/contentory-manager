@@ -1,3 +1,4 @@
+
 import { createHmac } from "node:crypto";
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
@@ -45,32 +46,37 @@ function generateOAuthSignature(
   consumerSecret: string,
   tokenSecret: string = ""
 ): string {
-  // 1. Create parameter string - all parameters must be sorted alphabetically
-  const parameterString = Object.keys(params)
-    .sort()
-    .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
-    .join('&');
+  try {
+    // 1. Create parameter string - all parameters must be sorted alphabetically
+    const parameterString = Object.keys(params)
+      .sort()
+      .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
+      .join('&');
+      
+    // 2. Create signature base string
+    const signatureBaseString = [
+      method.toUpperCase(),
+      encodeURIComponent(url),
+      encodeURIComponent(parameterString)
+    ].join('&');
     
-  // 2. Create signature base string
-  const signatureBaseString = [
-    method.toUpperCase(),
-    encodeURIComponent(url),
-    encodeURIComponent(parameterString)
-  ].join('&');
-  
-  // 3. Create signing key
-  const signingKey = `${encodeURIComponent(consumerSecret)}&${encodeURIComponent(tokenSecret || "")}`;
-  
-  // 4. Generate HMAC-SHA1 signature
-  const hmac = createHmac('sha1', signingKey);
-  const signature = hmac.update(signatureBaseString).digest('base64');
-  
-  console.log("[TWITTER-INTEGRATION] Parameter String:", parameterString);
-  console.log("[TWITTER-INTEGRATION] Signature Base String:", signatureBaseString);
-  console.log("[TWITTER-INTEGRATION] Signing Key pattern:", signingKey.replace(/./g, '*') + " (redacted for security)");
-  console.log("[TWITTER-INTEGRATION] Generated Signature:", signature);
-  
-  return signature;
+    // 3. Create signing key
+    const signingKey = `${encodeURIComponent(consumerSecret)}&${encodeURIComponent(tokenSecret || "")}`;
+    
+    // 4. Generate HMAC-SHA1 signature
+    const hmac = createHmac('sha1', signingKey);
+    const signature = hmac.update(signatureBaseString).digest('base64');
+    
+    console.log("[TWITTER-INTEGRATION] Parameter String:", parameterString);
+    console.log("[TWITTER-INTEGRATION] Signature Base String:", signatureBaseString);
+    console.log("[TWITTER-INTEGRATION] Signing Key pattern:", signingKey.replace(/./g, '*') + " (redacted for security)");
+    console.log("[TWITTER-INTEGRATION] Generated Signature:", signature);
+    
+    return signature;
+  } catch (error) {
+    console.error("[TWITTER-INTEGRATION] Error generating OAuth signature:", error);
+    throw new Error(`Failed to generate OAuth signature: ${error.message}`);
+  }
 }
 
 // Generate OAuth authorization header
@@ -81,41 +87,46 @@ function generateOAuthHeader(
   token: string | null = null,
   tokenSecret: string = ""
 ): string {
-  // Create OAuth parameters
-  const oauthParams: Record<string, string> = {
-    oauth_consumer_key: API_KEY!,
-    oauth_nonce: Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2),
-    oauth_signature_method: 'HMAC-SHA1',
-    oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
-    oauth_version: '1.0',
-    ...additionalParams
-  };
-  
-  // Add token if provided (not used for request token)
-  if (token) {
-    oauthParams.oauth_token = token;
-  }
-  
-  // Generate signature
-  const signature = generateOAuthSignature(
-    method,
-    url,
-    oauthParams,
-    API_SECRET!,
-    tokenSecret
-  );
-  
-  // Add signature to OAuth parameters
-  oauthParams.oauth_signature = signature;
-  
-  // Build authorization header string
-  const authHeader = 'OAuth ' + Object.keys(oauthParams)
-    .sort()
-    .map(key => `${encodeURIComponent(key)}="${encodeURIComponent(oauthParams[key])}"`)
-    .join(', ');
+  try {
+    // Create OAuth parameters
+    const oauthParams: Record<string, string> = {
+      oauth_consumer_key: API_KEY!,
+      oauth_nonce: Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2),
+      oauth_signature_method: 'HMAC-SHA1',
+      oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
+      oauth_version: '1.0',
+      ...additionalParams
+    };
     
-  console.log("[TWITTER-INTEGRATION] Full OAuth Header pattern:", authHeader.substring(0, 20) + "... (abbreviated for security)");
-  return authHeader;
+    // Add token if provided (not used for request token)
+    if (token) {
+      oauthParams.oauth_token = token;
+    }
+    
+    // Generate signature
+    const signature = generateOAuthSignature(
+      method,
+      url,
+      oauthParams,
+      API_SECRET!,
+      tokenSecret
+    );
+    
+    // Add signature to OAuth parameters
+    oauthParams.oauth_signature = signature;
+    
+    // Build authorization header string
+    const authHeader = 'OAuth ' + Object.keys(oauthParams)
+      .sort()
+      .map(key => `${encodeURIComponent(key)}="${encodeURIComponent(oauthParams[key])}"`)
+      .join(', ');
+      
+    console.log("[TWITTER-INTEGRATION] Full OAuth Header pattern:", authHeader.substring(0, 20) + "... (abbreviated for security)");
+    return authHeader;
+  } catch (error) {
+    console.error("[TWITTER-INTEGRATION] Error generating OAuth header:", error);
+    throw new Error(`Failed to generate OAuth header: ${error.message}`);
+  }
 }
 
 // Twitter API v2 base URL
@@ -168,8 +179,7 @@ async function sendTweet(tweetText: string): Promise<any> {
   console.log("[TWITTER-INTEGRATION] Request body:", JSON.stringify(requestBody));
   
   try {
-    // Add some common debugging validation to help troubleshoot issues
-    // 1. Check if token is valid for API requests
+    // First, test user credentials by calling a simple GET API endpoint
     console.log("[TWITTER-INTEGRATION] Testing Twitter credentials with a simple GET request first...");
     const testUrl = `${BASE_URL}/users/me?user.fields=created_at`;
     const testMethod = "GET";
@@ -201,7 +211,7 @@ async function sendTweet(tweetText: string): Promise<any> {
     
     console.log("[TWITTER-INTEGRATION] Credentials test passed. Proceeding with tweet...");
     
-    // 2. Check tweet text constraints
+    // Check tweet text constraints
     const tweetLength = tweetText.length;
     if (tweetLength > 280) {
       throw new Error(`Tweet exceeds maximum length of 280 characters (current: ${tweetLength})`);
@@ -221,6 +231,7 @@ async function sendTweet(tweetText: string): Promise<any> {
     console.log("[TWITTER-INTEGRATION] Tweet Response Status:", response.status);
     console.log("[TWITTER-INTEGRATION] Tweet Response Body:", responseText);
 
+    // Check for error conditions and provide specific error messages
     if (!response.ok) {
       // Specific handling for 403 Forbidden errors
       if (response.status === 403) {
@@ -256,6 +267,7 @@ async function sendTweet(tweetText: string): Promise<any> {
       throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
     }
 
+    // If everything is successful, return the parsed response
     return JSON.parse(responseText);
   } catch (error) {
     console.error("[TWITTER-INTEGRATION] Error sending tweet:", error);
@@ -324,7 +336,7 @@ async function verifyCredentials(): Promise<any> {
   }
 }
 
-// NEW: Handle Twitter auth initialization
+// Handle Twitter auth initialization
 async function handleTwitterAuth(): Promise<{ success: boolean; authURL?: string; error?: string }> {
   try {
     console.log("[TWITTER-INTEGRATION] Handling Twitter auth initialization");
@@ -402,7 +414,20 @@ serve(async (req) => {
   
   try {
     console.log("[TWITTER-INTEGRATION] Request received");
-    validateEnvironmentVariables();
+    
+    try {
+      validateEnvironmentVariables();
+    } catch (error) {
+      console.error("[TWITTER-INTEGRATION] Environment variable validation failed:", error);
+      return new Response(JSON.stringify({ 
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to validate environment variables",
+        timestamp: new Date().toISOString()
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     
     // Extract URL path to determine the endpoint
     const url = new URL(req.url);
@@ -413,11 +438,23 @@ serve(async (req) => {
     // For POST requests, parse the JSON body
     let body = {};
     if (req.method === 'POST') {
-      body = await req.json().catch(() => ({}));
-      console.log("[TWITTER-INTEGRATION] Request body:", JSON.stringify(body));
+      try {
+        body = await req.json().catch(() => ({}));
+        console.log("[TWITTER-INTEGRATION] Request body:", JSON.stringify(body));
+      } catch (parseError) {
+        console.error("[TWITTER-INTEGRATION] Error parsing request body:", parseError);
+        return new Response(JSON.stringify({ 
+          success: false,
+          error: "Invalid JSON in request body",
+          timestamp: new Date().toISOString()
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
     
-    // Handle auth endpoint (new)
+    // Handle auth endpoint
     if (endpoint === 'auth' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'auth') {
       console.log("[TWITTER-INTEGRATION] Handling auth request");
       const result = await handleTwitterAuth();
@@ -426,7 +463,7 @@ serve(async (req) => {
       });
     }
     
-    // Handle callback endpoint (new)
+    // Handle callback endpoint
     if (endpoint === 'callback') {
       console.log("[TWITTER-INTEGRATION] Handling callback request");
       const result = await handleAuthCallback(url);
@@ -547,7 +584,7 @@ serve(async (req) => {
   } catch (error: any) {
     console.error("[TWITTER-INTEGRATION] An error occurred:", error);
     return new Response(JSON.stringify({ 
-      error: error.message,
+      error: error.message || "Unknown error",
       timestamp: new Date().toISOString(),
       stack: error.stack
     }), {

@@ -125,7 +125,7 @@ serve(async (req) => {
       // For tweet endpoint, forward the request to the twitter-integration function
       const requestBody = await req.json();
       
-      console.log('[TWITTER-API] Tweet content:', requestBody.content.substring(0, 50) + '...');
+      console.log('[TWITTER-API] Tweet content:', requestBody.content.substring(0, 50) + (requestBody.content.length > 50 ? '...' : ''));
       
       try {
         // Forward the request to the twitter-integration function
