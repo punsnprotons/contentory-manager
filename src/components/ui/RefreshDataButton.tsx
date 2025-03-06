@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
@@ -126,76 +125,63 @@ export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Pro
   }
 };
 
-export const publishToTwitter = async (content: string, mediaUrl?: string): Promise<RefreshResponse> => {
+export const publishToTwitter = async (content: string, mediaUrl?: string): Promise<{ success: boolean; message: string; error?: string; data?: any }> => {
   try {
-    const user = await getCurrentUser();
+    const { data: { session } } = await supabase.auth.getSession();
     
-    if (!user) {
-      toast.error('You need to be logged in to publish to Twitter');
+    if (!session) {
       return {
         success: false,
-        message: 'User not authenticated'
+        message: 'You must be logged in to publish to Twitter',
+        error: 'Authentication required'
       };
     }
     
-    const { data, error } = await supabase.functions.invoke('twitter-integration', {
+    console.log('Publishing content to Twitter:', content);
+    
+    const response = await supabase.functions.invoke('twitter-api', {
       method: 'POST',
-      body: { 
-        endpoint: 'tweet',
-        text: content 
-      },
       headers: {
-        Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+        path: '/tweet',
+      },
+      body: {
+        content: content,
+        mediaUrl: mediaUrl
       }
     });
     
-    if (error) {
-      console.error('Error publishing to Twitter:', error);
+    if (response.error) {
+      console.error('Twitter API error:', response.error);
       
-      // Check if the error contains a JSON response with detailed information
-      let errorDetails = "Unable to post to Twitter";
-      let instructions = "";
-      
-      try {
-        // The error might contain a JSON string with more details
-        if (typeof error.message === 'string' && error.message.includes('{')) {
-          const jsonStart = error.message.indexOf('{');
-          const jsonString = error.message.substring(jsonStart);
-          const parsedError = JSON.parse(jsonString);
-          
-          if (parsedError.details) {
-            errorDetails = parsedError.details;
-          }
-          
-          if (parsedError.instructions) {
-            instructions = parsedError.instructions;
-          }
-        }
-      } catch (parseError) {
-        console.warn('Could not parse error message as JSON:', parseError);
+      const errorMessage = response.error.message || '';
+      if (errorMessage.includes('Forbidden') || errorMessage.includes('403') || errorMessage.includes('permissions')) {
+        return {
+          success: false,
+          message: 'Twitter API permission error',
+          error: 'Your Twitter app does not have write permissions. Please update permissions in the Twitter Developer Portal and regenerate your access tokens.'
+        };
       }
       
       return {
         success: false,
         message: 'Failed to publish to Twitter',
-        error,
-        details: errorDetails,
-        instructions
+        error: response.error.message || 'Unknown error'
       };
     }
     
-    return {
-      success: true,
-      message: 'Content published successfully to Twitter',
-      data
-    };
-  } catch (error) {
-    console.error('Unexpected error during Twitter publish:', error);
+    console.log('Successfully published to Twitter:', response.data);
     
     return {
+      success: true,
+      message: 'Successfully published to Twitter',
+      data: response.data
+    };
+  } catch (error) {
+    console.error('Error publishing to Twitter:', error);
+    return {
       success: false,
-      message: 'An unexpected error occurred while publishing to Twitter',
-      error
+      message: 'Failed to publish to Twitter',
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
     };
   }
 };

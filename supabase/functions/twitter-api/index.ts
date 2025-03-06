@@ -117,18 +117,52 @@ serve(async (req) => {
       return new Response(JSON.stringify(data), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    } else if (path === '/verify-credentials') {
+      // Add a new endpoint to verify Twitter credentials
+      const { data, error } = await supabaseClient.functions.invoke(
+        'twitter-integration',
+        {
+          method: 'POST',
+          body: { 
+            endpoint: 'verify'
+          }
+        }
+      );
+
+      if (error) {
+        console.error('Error verifying Twitter credentials:', error);
+        throw new Error(`Failed to verify Twitter credentials: ${error.message}`);
+      }
+
+      return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     } else {
       throw new Error(`Unknown path: ${path}`);
     }
   } catch (error) {
     console.error('Error publishing to Twitter:', error);
+    
+    // Check for specific error messages that indicate permission issues
+    let errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    let statusCode = 500;
+    
+    // Provide more specific error messages and instructions
+    if (errorMessage.includes('Forbidden') || errorMessage.includes('403')) {
+      errorMessage = 'Twitter API permission error: Your app may not have write permissions enabled or your access tokens may be outdated. Please go to the Twitter Developer Portal, ensure "Read and write" or "Read and write and Direct message" permissions are selected, and regenerate your access tokens. Then update the TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings.';
+      statusCode = 403;
+    }
+    
     return new Response(
       JSON.stringify({
         success: false,
-        error: error instanceof Error ? error.message : 'An unknown error occurred'
+        error: errorMessage,
+        instructions: statusCode === 403 ? 
+          "After updating permissions in the Twitter Developer Portal, you need to regenerate your access tokens and update the TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings." : 
+          undefined
       }),
       {
-        status: 500,
+        status: statusCode,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );

@@ -114,7 +114,18 @@ const ContentGeneration: React.FC = () => {
         const twitterResult = await publishToTwitter(generatedContent, mediaUrl);
         
         if (!twitterResult.success) {
-          toast.error(twitterResult.message);
+          const errorMessage = twitterResult.error || twitterResult.message;
+          
+          if (errorMessage.includes('permission') || errorMessage.includes('Forbidden') || errorMessage.includes('403')) {
+            toast.error('Twitter API Permission Error', {
+              description: 'Your Twitter app needs "Read and write" permissions. Please update permissions in the Twitter Developer Portal, regenerate your access tokens, and update them in Supabase.',
+              duration: 8000,
+            });
+          } else {
+            toast.error('Failed to publish to Twitter', {
+              description: errorMessage,
+            });
+          }
           return;
         }
         
