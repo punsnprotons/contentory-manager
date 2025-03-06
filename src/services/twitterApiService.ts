@@ -1,0 +1,155 @@
+
+import { supabase } from "@/integrations/supabase/client";
+import { Session } from "@supabase/supabase-js";
+
+/**
+ * Twitter API Service for making authenticated Twitter API calls
+ */
+export class TwitterApiService {
+  private userId: string;
+  private username?: string;
+  private accessToken?: string;
+  private accessTokenSecret?: string;
+
+  constructor(userId: string) {
+    this.userId = userId;
+  }
+
+  /**
+   * Initialize the Twitter service by loading credentials from the database
+   */
+  async initialize(): Promise<TwitterApiService> {
+    // Get user's Twitter connection from the database
+    const { data: connection, error } = await supabase
+      .from('platform_connections')
+      .select('*')
+      .eq('user_id', this.userId)
+      .eq('platform', 'twitter')
+      .eq('connected', true)
+      .single();
+    
+    if (error || !connection) {
+      throw new Error('No connected Twitter account found');
+    }
+    
+    this.username = connection.username;
+    this.accessToken = connection.access_token || undefined;
+    this.accessTokenSecret = connection.refresh_token || undefined;
+    
+    return this;
+  }
+
+  /**
+   * Send a tweet
+   */
+  async sendTweet(text: string): Promise<any> {
+    try {
+      const response = await supabase.functions.invoke('twitter-integration', {
+        method: 'POST',
+        body: { 
+          endpoint: 'tweet',
+          text
+        }
+      });
+      
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error sending tweet:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get the current user profile
+   */
+  async getUserProfile(): Promise<any> {
+    try {
+      const response = await supabase.functions.invoke('twitter-integration', {
+        method: 'POST',
+        body: { endpoint: 'user' }
+      });
+      
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error getting user profile:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Verify the Twitter credentials
+   */
+  async verifyCredentials(): Promise<any> {
+    try {
+      const response = await supabase.functions.invoke('twitter-integration', {
+        method: 'POST',
+        body: { endpoint: 'verify' }
+      });
+      
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error verifying credentials:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Initialize Twitter OAuth flow
+   */
+  async initiateAuth(): Promise<string> {
+    try {
+      const response = await supabase.functions.invoke('twitter-integration', {
+        method: 'POST',
+        body: { endpoint: 'auth' }
+      });
+      
+      if (response.error || !response.data?.success || !response.data?.authURL) {
+        throw new Error(response.error?.message || 'Failed to initialize Twitter authentication');
+      }
+      
+      return response.data.authURL;
+    } catch (error) {
+      console.error('Error initiating Twitter auth:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Factory method to create and initialize a TwitterApiService
+   */
+  static async create(session: Session | null): Promise<TwitterApiService | null> {
+    if (!session?.user) {
+      return null;
+    }
+    
+    try {
+      const service = new TwitterApiService(session.user.id);
+      await service.initialize();
+      return service;
+    } catch (error) {
+      console.error('Error creating Twitter service:', error);
+      return null;
+    }
+  }
+}
+
+// Utility function to get an instance of the Twitter API service
+export async function getTwitterApiService(session: Session | null): Promise<TwitterApiService | null> {
+  if (!session?.user) {
+    return null;
+  }
+  
+  return TwitterApiService.create(session);
+}

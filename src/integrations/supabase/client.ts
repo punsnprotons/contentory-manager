@@ -24,3 +24,15 @@ export const supabase = createClient<Database>(
     },
   }
 );
+
+// Helper for getting the current user
+export const getCurrentUser = async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user || null;
+};
+
+// Helper for checking if user is authenticated
+export const isAuthenticated = async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  return !!session;
+};

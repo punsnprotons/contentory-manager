@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { TwitterApiService } from "@/services/twitterApiService";
 
 interface UserSettings {
   id: string;
@@ -45,6 +47,7 @@ interface TwitterVerificationResult {
 }
 
 const Settings: React.FC = () => {
+  const { session } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -62,6 +65,22 @@ const Settings: React.FC = () => {
   });
   const [isVerifyingTwitter, setIsVerifyingTwitter] = useState(false);
   const [isConnectingTwitter, setIsConnectingTwitter] = useState(false);
+  const [twitterService, setTwitterService] = useState<TwitterApiService | null>(null);
+
+  useEffect(() => {
+    async function loadTwitterService() {
+      if (session) {
+        try {
+          const service = await TwitterApiService.create(session);
+          setTwitterService(service);
+        } catch (error) {
+          console.log("No Twitter connection found or not initialized yet");
+        }
+      }
+    }
+    
+    loadTwitterService();
+  }, [session]);
 
   useEffect(() => {
     async function fetchUserData() {
@@ -253,14 +272,28 @@ const Settings: React.FC = () => {
   };
 
   const verifyTwitterCredentials = async () => {
+    if (!session) {
+      toast({
+        title: "Authentication Required",
+        description: "You must be logged in to verify Twitter credentials.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     setIsVerifyingTwitter(true);
     try {
-      const response = await supabase.functions.invoke('twitter-integration', {
-        method: 'POST',
-        body: { endpoint: 'verify' }
-      });
+      let result;
       
-      const result = response.data as TwitterVerificationResult;
+      if (twitterService) {
+        result = await twitterService.verifyCredentials();
+      } else {
+        const response = await supabase.functions.invoke('twitter-integration', {
+          method: 'POST',
+          body: { endpoint: 'verify' }
+        });
+        result = response.data;
+      }
       
       if (result && result.verified && result.user) {
         const { error } = await supabase
@@ -290,6 +323,11 @@ const Settings: React.FC = () => {
             setConnections(refreshedConnections);
           }
           
+          if (session) {
+            const service = await TwitterApiService.create(session);
+            setTwitterService(service);
+          }
+          
           toast({
             title: "Twitter Connected",
             description: `Successfully connected to Twitter as @${result.user.username}`,
@@ -315,27 +353,44 @@ const Settings: React.FC = () => {
   };
 
   const initiateTwitterAuth = async () => {
+    if (!session) {
+      toast({
+        title: "Authentication Required",
+        description: "You must be logged in to connect to Twitter.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     setIsConnectingTwitter(true);
     try {
-      const response = await supabase.functions.invoke('twitter-integration', {
-        method: 'POST',
-        body: { endpoint: 'auth' }
-      });
+      let authURL;
       
-      if (response.data?.success && response.data?.authURL) {
-        window.location.href = response.data.authURL;
+      if (twitterService) {
+        authURL = await twitterService.initiateAuth();
       } else {
-        toast({
-          title: "Authentication Failed",
-          description: response.data?.message || "Could not initiate Twitter authentication",
-          variant: "destructive"
+        const response = await supabase.functions.invoke('twitter-integration', {
+          method: 'POST',
+          body: { endpoint: 'auth' }
         });
+        
+        if (!response.data?.success || !response.data?.authURL) {
+          throw new Error(response.data?.message || "Failed to generate authentication URL");
+        }
+        
+        authURL = response.data.authURL;
+      }
+      
+      if (authURL) {
+        window.location.href = authURL;
+      } else {
+        throw new Error("No authentication URL returned");
       }
     } catch (error) {
       console.error('Error initiating Twitter authentication:', error);
       toast({
         title: "Authentication Error",
-        description: "An error occurred while initiating Twitter authentication. Check console for details.",
+        description: error instanceof Error ? error.message : "An error occurred while initiating Twitter authentication.",
         variant: "destructive"
       });
     } finally {
@@ -344,14 +399,23 @@ const Settings: React.FC = () => {
   };
 
   const handleTestTweet = async () => {
-    try {
-      const { data, error } = await supabase.functions.invoke('twitter-integration', {
-        method: 'POST',
-        body: { endpoint: 'tweet', text: "This is a test tweet from Wubble AI!" }
+    if (!session) {
+      toast({
+        title: "Authentication Required",
+        description: "You must be logged in to send a tweet.",
+        variant: "destructive"
       });
-      
-      if (error) {
-        throw error;
+      return;
+    }
+    
+    try {
+      if (twitterService) {
+        await twitterService.sendTweet("This is a test tweet from Wubble AI!");
+      } else {
+        await supabase.functions.invoke('twitter-integration', {
+          method: 'POST',
+          body: { endpoint: 'tweet', text: "This is a test tweet from Wubble AI!" }
+        });
       }
       
       toast({

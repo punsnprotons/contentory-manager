@@ -91,14 +91,11 @@ function generateOAuthHeader(
     oauthParams.oauth_token = token;
   }
   
-  // Prepare all parameters for signature (oauth params + any other params)
-  const allParams = { ...oauthParams };
-  
   // Generate signature
   const signature = generateOAuthSignature(
     method,
     url,
-    allParams,
+    oauthParams,
     API_SECRET!,
     tokenSecret
   );
