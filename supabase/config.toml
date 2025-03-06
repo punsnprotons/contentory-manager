@@ -12,4 +12,4 @@ project_id = "fxzamjowvpnyuxthusib"
 [functions]
   [functions.twitter-integration]
     verify_jwt = false
-    import_map = "supabase/functions/import_map.json"
+    import_map = "functions/import_map.json"
