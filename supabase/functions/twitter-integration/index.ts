@@ -413,7 +413,7 @@ serve(async (req) => {
       const result = await handleCallback(url);
       
       // Get the application URL for redirect - updated to use the production URL
-      const appUrl = "https://contentory-manager.lovable.app/settings";
+      const appUrl = "https://contentory-manager.lovable.app/settings?auth=success";
       
       // Return HTML that will post a message to the opener window and then close itself
       return new Response(

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -12,10 +11,8 @@ import { TwitterApiService } from '@/services/twitterApiService';
 import { toast } from 'sonner';
 import { PlusCircle, Twitter, Instagram, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 
-// Define the proper type for platform
 type SocialPlatform = 'twitter' | 'instagram';
 
-// Define the type for connection
 interface Connection {
   platform: SocialPlatform;
   connected: boolean;
@@ -32,21 +29,15 @@ const Settings = () => {
   const [error, setError] = useState<string | null>(null);
   const { session } = useAuth();
   
-  // Add this to force refresh of connections when the component mounts
-  // or when URL has a specific parameter
   useEffect(() => {
-    // Check if we just came back from Twitter auth flow
     const hasAuthParam = window.location.search.includes('auth=success');
 
     if (hasAuthParam) {
-      // Clean up the URL
       const newUrl = window.location.pathname;
       window.history.replaceState({}, document.title, newUrl);
       
-      // Show success message
       toast.success("Successfully connected to Twitter!");
       
-      // Force refresh of connections
       if (session?.user) {
         loadConnections();
       }
@@ -73,7 +64,6 @@ const Settings = () => {
     } else {
       console.log("Settings: No user session available");
       setPageLoading(false);
-      // Set default values even if there's no session
       setConnections([
         { platform: 'twitter', connected: false },
         { platform: 'instagram', connected: false }
@@ -81,21 +71,19 @@ const Settings = () => {
     }
   }, [session]);
 
-  // Setup message listener for Twitter auth on component mount
   useEffect(() => {
     const messageHandler = (event: MessageEvent) => {
       console.log("Settings: Received message event:", event);
       
       if (event.data && event.data.type === 'TWITTER_AUTH_SUCCESS') {
         console.log("Settings: Auth success message received, refreshing connections");
-        // Refresh connections to show updated status
         loadConnections();
+        toast.success("Successfully connected to Twitter!");
       }
     };
     
     window.addEventListener('message', messageHandler);
     
-    // Clean up event listener on component unmount
     return () => {
       window.removeEventListener('message', messageHandler);
     };
@@ -111,7 +99,6 @@ const Settings = () => {
         .single();
         
       if (error) {
-        // If the error is that no rows were returned, just use defaults
         if (error.code === 'PGRST116') {
           console.log("Settings: No user settings found, using defaults");
           return;
@@ -129,7 +116,6 @@ const Settings = () => {
     } catch (error) {
       console.error('Error loading user settings:', error);
       toast.error("Failed to load user settings");
-      // Continue with default values
     }
   };
   
@@ -160,7 +146,6 @@ const Settings = () => {
       
       if (data && data.length > 0) {
         console.log("Settings: Connections loaded", data);
-        // Cast the data to the correct type
         const typedConnections = data.map(conn => ({
           ...conn,
           platform: conn.platform as SocialPlatform
@@ -168,7 +153,6 @@ const Settings = () => {
         
         setConnections(typedConnections);
       } else {
-        // Default connections if none found
         console.log("Settings: No connections found, using defaults");
         setConnections([
           { platform: 'twitter', connected: false },
@@ -178,7 +162,6 @@ const Settings = () => {
     } catch (error) {
       console.error('Error loading connections:', error);
       toast.error("Failed to load social media connections");
-      // Set default connections on error
       setConnections([
         { platform: 'twitter', connected: false },
         { platform: 'instagram', connected: false }
@@ -231,7 +214,6 @@ const Settings = () => {
       const authURL = await twitterService.initiateAuth();
       
       console.log("Settings: Opening Twitter auth URL:", authURL);
-      // Open Twitter auth in a new window
       const authWindow = window.open(authURL, '_blank', 'width=600,height=600');
       
       if (!authWindow) {
@@ -257,14 +239,12 @@ const Settings = () => {
     setImportLoading(true);
     try {
       console.log("Settings: Importing Twitter tweets");
-      // Create and initialize Twitter service
       const twitterService = await TwitterApiService.create(session);
       
       if (!twitterService) {
         throw new Error('Could not initialize Twitter service');
       }
       
-      // Fetch and store tweets
       const result = await twitterService.fetchUserTweets(50);
       
       console.log("Settings: Import result", result);
@@ -274,7 +254,6 @@ const Settings = () => {
         toast.success('Twitter import completed');
       }
       
-      // Refresh connections to show updated status
       await loadConnections();
     } catch (error) {
       console.error('Error importing tweets:', error);
@@ -284,7 +263,6 @@ const Settings = () => {
     }
   };
 
-  // If page is loading, show loading indicator
   if (pageLoading) {
     return (
       <div className="container mx-auto py-6 flex justify-center items-center min-h-[400px]">
@@ -296,7 +274,6 @@ const Settings = () => {
     );
   }
 
-  // If there's an error, show error message
   if (error) {
     return (
       <div className="container mx-auto py-6 space-y-8">
