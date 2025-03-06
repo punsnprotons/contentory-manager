@@ -7,11 +7,13 @@ import { toast } from 'sonner';
 // Rate limiting constants
 const RATE_LIMIT_BACKOFF_MS = 5000; // 5 seconds backoff for retry
 const MAX_RETRIES = 2;
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes window for rate limiting
+const MAX_REQUESTS_PER_WINDOW = 5; // Maximum requests per window
 
 export class TwitterApiService {
   userId: string;
   private lastRequestTime = 0;
-  private static requestCounts: Record<string, { count: number, timestamp: number }> = {};
+  private static requestCounts: Record<string, { count: number, requests: number[], timestamp: number }> = {};
   
   /**
    * Create a new instance of TwitterApiService with authentication
@@ -39,15 +41,22 @@ export class TwitterApiService {
     const now = Date.now();
     const entry = TwitterApiService.requestCounts[endpoint];
     
-    // Reset count if it's been more than 15 minutes since the first request
-    if (entry && now - entry.timestamp > 15 * 60 * 1000) {
+    if (!entry) {
+      return false;
+    }
+    
+    // Reset count if it's been more than the window time since the first request
+    if (now - entry.timestamp > RATE_LIMIT_WINDOW_MS) {
       delete TwitterApiService.requestCounts[endpoint];
       return false;
     }
     
-    // Allow up to 3 requests per 15 minutes for auth endpoints
-    if (entry && entry.count >= 3 && (endpoint === 'auth' || endpoint === 'verify-credentials')) {
-      console.log(`TwitterApiService: Rate limiting ${endpoint}, count: ${entry.count}`);
+    // Clean up old requests
+    entry.requests = entry.requests.filter(time => now - time < RATE_LIMIT_WINDOW_MS);
+    
+    // Check if we've made too many requests in the window
+    if (entry.requests.length >= MAX_REQUESTS_PER_WINDOW) {
+      console.log(`TwitterApiService: Rate limiting ${endpoint}, count: ${entry.requests.length}`);
       return true;
     }
     
@@ -62,9 +71,47 @@ export class TwitterApiService {
     const entry = TwitterApiService.requestCounts[endpoint];
     
     if (!entry) {
-      TwitterApiService.requestCounts[endpoint] = { count: 1, timestamp: now };
+      TwitterApiService.requestCounts[endpoint] = { 
+        count: 1, 
+        requests: [now],
+        timestamp: now 
+      };
     } else {
+      entry.requests.push(now);
       entry.count++;
+    }
+  }
+  
+  /**
+   * Calculate remaining time before rate limit resets
+   */
+  private static getRateLimitResetTime(endpoint: string): number {
+    const now = Date.now();
+    const entry = TwitterApiService.requestCounts[endpoint];
+    
+    if (!entry || entry.requests.length === 0) {
+      return 0;
+    }
+    
+    // Find oldest request in the window
+    const oldestRequest = Math.min(...entry.requests);
+    const resetTime = oldestRequest + RATE_LIMIT_WINDOW_MS - now;
+    
+    return Math.max(0, resetTime);
+  }
+  
+  /**
+   * Format rate limit wait time to human-readable string
+   */
+  private static formatRateLimitWaitTime(ms: number): string {
+    if (ms < 60000) {
+      return 'less than a minute';
+    } else if (ms < 3600000) {
+      const minutes = Math.ceil(ms / 60000);
+      return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+    } else {
+      const hours = Math.ceil(ms / 3600000);
+      return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
     }
   }
   
@@ -79,20 +126,24 @@ export class TwitterApiService {
       
       // Check client-side rate limiting
       if (TwitterApiService.isRateLimited(endpoint)) {
-        const waitTimeMinutes = Math.ceil((15 * 60 * 1000 - (Date.now() - TwitterApiService.requestCounts[endpoint].timestamp)) / 60000);
-        throw new Error(`Twitter API rate limit exceeded. Please try again in about ${waitTimeMinutes} minutes.`);
+        const waitTime = TwitterApiService.getRateLimitResetTime(endpoint);
+        const formattedTime = TwitterApiService.formatRateLimitWaitTime(waitTime);
+        throw new Error(`Twitter API rate limit exceeded. Please try again in ${formattedTime}.`);
       }
       
       // Track this request
       TwitterApiService.trackRequest(endpoint);
       
       // Call the Twitter API edge function with auth endpoint
-      const { data, error } = await supabase.functions.invoke('twitter-api', {
+      const { data, error } = await supabase.functions.invoke('twitter-integration', {
         method: 'POST',
         headers: {
           'path': '/auth'
         },
-        body: { timestamp: Date.now() } // Add timestamp to avoid caching
+        body: { 
+          endpoint: 'auth',
+          timestamp: Date.now() // Add timestamp to avoid caching
+        }
       });
       
       console.log('TwitterApiService: Auth response:', data);
@@ -101,19 +152,23 @@ export class TwitterApiService {
         console.error('TwitterApiService: Error initiating Twitter auth:', error);
         
         // Check for rate limiting
-        if (error.message && (error.message.includes('429') || error.message.includes('rate limit'))) {
+        if (error.message && (
+          error.message.includes('429') || 
+          error.message.includes('rate limit') || 
+          error.message.includes('Too Many Requests')
+        )) {
           if (retryCount < MAX_RETRIES) {
             console.log(`TwitterApiService: Rate limit hit, retrying in ${RATE_LIMIT_BACKOFF_MS}ms (${retryCount + 1}/${MAX_RETRIES})`);
             
             // Wait and retry with exponential backoff
-            await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_BACKOFF_MS * (retryCount + 1)));
+            await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_BACKOFF_MS * Math.pow(2, retryCount)));
             return this.initiateAuth(retryCount + 1);
           }
           
           throw new Error('Twitter API rate limit exceeded. Please try again in a few minutes.');
         }
         
-        throw new Error('Failed to initiate Twitter authentication');
+        throw new Error('Failed to initiate Twitter authentication: ' + error.message);
       }
       
       if (!data || !data.success || !data.authURL) {
@@ -121,7 +176,8 @@ export class TwitterApiService {
         
         // Check for rate limit indicator in the response
         if (data && data.rateLimited) {
-          throw new Error(data.error || 'Twitter API rate limit exceeded. Please try again in a few minutes.');
+          const waitTime = data.resetTime ? TwitterApiService.formatRateLimitWaitTime(data.resetTime) : 'a few minutes';
+          throw new Error(data.error || `Twitter API rate limit exceeded. Please try again in ${waitTime}.`);
         }
         
         throw new Error('Failed to get auth URL');

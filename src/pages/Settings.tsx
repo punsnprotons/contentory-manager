@@ -29,6 +29,7 @@ const Settings = () => {
   const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [rateLimited, setRateLimited] = useState(false);
   const { session } = useAuth();
   
   useEffect(() => {
@@ -243,10 +244,14 @@ const Settings = () => {
         console.error('Error getting Twitter auth URL:', authError);
         const errorMessage = authError instanceof Error ? authError.message : 'Failed to connect Twitter';
         
-        if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
-          toast.error('Twitter API rate limit exceeded. Please wait a few minutes before trying again.', {
+        if (errorMessage.includes('rate limit') || errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
+          toast.error(errorMessage, {
             duration: 8000,
           });
+          setRateLimited(true);
+          setTimeout(() => {
+            setRateLimited(false);
+          }, 60000);
         } else {
           toast.error(errorMessage);
         }
@@ -477,12 +482,18 @@ const Settings = () => {
                           variant="outline" 
                           size="sm"
                           onClick={connection.platform === 'twitter' ? connectTwitter : undefined}
-                          disabled={loading || connection.platform !== 'twitter'}
+                          disabled={loading || connection.platform !== 'twitter' || rateLimited}
+                          className={rateLimited && connection.platform === 'twitter' ? "bg-red-50" : ""}
                         >
                           {loading && connection.platform === 'twitter' ? (
                             <>
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                               Connecting...
+                            </>
+                          ) : rateLimited && connection.platform === 'twitter' ? (
+                            <>
+                              <AlertCircle className="h-4 w-4 mr-2 text-red-500" />
+                              Rate Limited
                             </>
                           ) : (
                             <>

@@ -14,13 +14,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Rate limiting helpers - improve the implementation
-let lastRequestTimeByIP: Record<string, Record<string, number>> = {};
+// Enhanced rate limiting helpers
+let lastRequestTimeByIP: Record<string, Record<string, {
+  lastRequest: number,
+  requests: number[],
+  consecutiveErrors: number
+}>> = {};
+
 const REQUEST_RATE_LIMIT_MS = 15000; // 15 seconds between requests
 const IP_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 const MAX_REQUESTS_PER_WINDOW = 5; // 5 requests per 15 minutes
+const ERROR_BACKOFF_MS = 30000; // 30 seconds after errors
 
-function checkRateLimit(ip: string, endpoint: string): boolean {
+function checkRateLimit(ip: string, endpoint: string): { allowed: boolean, resetTime?: number } {
   const now = Date.now();
   
   // Initialize rate limiting data structure for this IP if it doesn't exist
@@ -33,6 +39,7 @@ function checkRateLimit(ip: string, endpoint: string): boolean {
     lastRequestTimeByIP[ip][endpoint] = {
       lastRequest: 0,
       requests: [],
+      consecutiveErrors: 0
     };
   }
   
@@ -41,7 +48,18 @@ function checkRateLimit(ip: string, endpoint: string): boolean {
   // Check if we've made a request too recently (15 seconds)
   if (now - ipData.lastRequest < REQUEST_RATE_LIMIT_MS) {
     console.log(`[TWITTER-INTEGRATION] Rate limit hit for ${ip} on ${endpoint}, too frequent`);
-    return false;
+    const resetTime = ipData.lastRequest + REQUEST_RATE_LIMIT_MS - now;
+    return { allowed: false, resetTime };
+  }
+  
+  // If there have been consecutive errors, enforce a longer backoff
+  if (ipData.consecutiveErrors > 0) {
+    const backoffTime = ERROR_BACKOFF_MS * ipData.consecutiveErrors;
+    if (now - ipData.lastRequest < backoffTime) {
+      console.log(`[TWITTER-INTEGRATION] Error backoff for ${ip} on ${endpoint}, consecutive errors: ${ipData.consecutiveErrors}`);
+      const resetTime = ipData.lastRequest + backoffTime - now;
+      return { allowed: false, resetTime };
+    }
   }
   
   // Remove requests older than the window
@@ -50,14 +68,52 @@ function checkRateLimit(ip: string, endpoint: string): boolean {
   // Check if we've made too many requests in the window
   if (ipData.requests.length >= MAX_REQUESTS_PER_WINDOW) {
     console.log(`[TWITTER-INTEGRATION] Rate limit hit for ${ip} on ${endpoint}, too many requests`);
-    return false;
+    
+    // Calculate time until oldest request falls out of window
+    const oldestRequest = Math.min(...ipData.requests);
+    const resetTime = oldestRequest + IP_RATE_LIMIT_WINDOW_MS - now;
+    
+    return { allowed: false, resetTime };
   }
   
-  // Update rate limiting data
+  return { allowed: true };
+}
+
+function trackRequest(ip: string, endpoint: string, isError = false): void {
+  const now = Date.now();
+  
+  if (!lastRequestTimeByIP[ip]) {
+    lastRequestTimeByIP[ip] = {};
+  }
+  
+  if (!lastRequestTimeByIP[ip][endpoint]) {
+    lastRequestTimeByIP[ip][endpoint] = {
+      lastRequest: now,
+      requests: [now],
+      consecutiveErrors: isError ? 1 : 0
+    };
+    return;
+  }
+  
+  const ipData = lastRequestTimeByIP[ip][endpoint];
   ipData.lastRequest = now;
   ipData.requests.push(now);
   
-  return true; // Not rate limited
+  if (isError) {
+    ipData.consecutiveErrors += 1;
+  } else {
+    ipData.consecutiveErrors = 0; // Reset on successful request
+  }
+}
+
+function formatRateLimitWaitTime(ms: number): string {
+  if (ms < 60000) {
+    return `${Math.ceil(ms / 1000)} seconds`;
+  } else if (ms < 3600000) {
+    return `${Math.ceil(ms / 60000)} minutes`;
+  } else {
+    return `${Math.ceil(ms / 3600000)} hours`;
+  }
 }
 
 // Validate environment variables
@@ -173,12 +229,6 @@ const BASE_URL = "https://api.twitter.com/2";
 
 // Get current user profile
 async function getUser() {
-  // Check rate limit
-  if (!checkRateLimit('unknown-ip', 'get-user')) {
-    console.log("[TWITTER-INTEGRATION] Rate limit hit, delaying request");
-    throw new Error("Rate limit exceeded. Please try again in a few seconds.");
-  }
-  
   const url = `${BASE_URL}/users/me`;
   const method = "GET";
   const authHeader = generateOAuthHeader(method, url, {}, ACCESS_TOKEN, ACCESS_TOKEN_SECRET);
@@ -387,32 +437,40 @@ async function verifyCredentials(): Promise<any> {
 }
 
 // Handle Twitter auth initialization
-async function handleTwitterAuth(ip: string): Promise<{ success: boolean; authURL?: string; error?: string; rateLimited?: boolean }> {
+async function handleTwitterAuth(ip: string): Promise<{ 
+  success: boolean; 
+  authURL?: string; 
+  error?: string; 
+  rateLimited?: boolean;
+  resetTime?: number;
+}> {
   try {
     console.log("[TWITTER-INTEGRATION] Handling Twitter auth initialization");
     
     // Check rate limit before making API calls
-    if (!checkRateLimit(ip, 'auth')) {
+    const rateLimitCheck = checkRateLimit(ip, 'auth');
+    if (!rateLimitCheck.allowed) {
       console.log("[TWITTER-INTEGRATION] Rate limit hit, returning error");
+      const waitTime = rateLimitCheck.resetTime ? formatRateLimitWaitTime(rateLimitCheck.resetTime) : "a few minutes";
+      
       return {
         success: false,
-        error: "Too many requests. Please try again after a few minutes.",
-        rateLimited: true
+        error: `Too many requests. Please try again after ${waitTime}.`,
+        rateLimited: true,
+        resetTime: rateLimitCheck.resetTime
       };
     }
     
     // For simplicity, we'll use a direct auth approach with the existing credentials
-    // Instead of a complex OAuth flow, we'll verify our credentials and just return success
-    // This will allow users to post tweets using the app's credentials
-    
     // 1. Verify that our credentials work by making a test API call
     try {
       const user = await getUser();
       console.log("[TWITTER-INTEGRATION] Successfully verified credentials, user ID:", user.data?.id);
       
+      // Track successful request
+      trackRequest(ip, 'auth', false);
+      
       // Return a success message with the fake "auth URL"
-      // In a real implementation, this would be an actual Twitter OAuth URL
-      // But for our case, we'll just say authentication is successful
       return {
         success: true,
         authURL: `${CALLBACK_URL}?success=true&token=${encodeURIComponent(ACCESS_TOKEN!)}&token_secret=${encodeURIComponent(ACCESS_TOKEN_SECRET!)}` 
@@ -420,12 +478,16 @@ async function handleTwitterAuth(ip: string): Promise<{ success: boolean; authUR
     } catch (error) {
       console.error("[TWITTER-INTEGRATION] Error verifying credentials during auth:", error);
       
+      // Track error
+      trackRequest(ip, 'auth', true);
+      
       // Check if this is a rate limit issue
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      if (errorMessage.includes("rate limit") || errorMessage.includes("429")) {
+      if (errorMessage.includes("rate limit") || errorMessage.includes("429") || errorMessage.includes("Too Many Requests")) {
         return {
           success: false,
-          error: "Twitter API rate limit exceeded. Please try again in a few minutes."
+          error: "Twitter API rate limit exceeded. Please try again in a few minutes.",
+          rateLimited: true
         };
       }
       
@@ -543,7 +605,8 @@ serve(async (req) => {
       // Set retry-after header for rate limited responses
       const headers = { ...corsHeaders, "Content-Type": "application/json" };
       if (status === 429) {
-        headers["Retry-After"] = "900"; // 15 minutes in seconds
+        const retryAfter = result.resetTime ? Math.ceil(result.resetTime / 1000) : 900;
+        headers["Retry-After"] = retryAfter.toString();
       }
       
       return new Response(JSON.stringify(result), {
