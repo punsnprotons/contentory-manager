@@ -417,6 +417,9 @@ serve(async (req) => {
       console.log("Handling Twitter callback");
       const result = await handleCallback(url);
       
+      // Get the application URL for redirect
+      const appUrl = "https://fxzamjowvpnyuxthusib.supabase.co/settings";
+      
       // Return HTML that will post a message to the opener window and then close itself
       return new Response(
         `<html><body>
@@ -428,8 +431,8 @@ serve(async (req) => {
               // Close the popup window after posting the message
               window.close();
             } else {
-              // If window.opener is not available, redirect to the main application
-              window.location.href = "https://fxzamjowvpnyuxthusib.vercel.app";
+              // If window.opener is not available, redirect to the application
+              window.location.href = "${appUrl}";
             }
           </script>
           <p>Authentication successful. You can close this window and return to the application.</p>

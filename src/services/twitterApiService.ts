@@ -482,7 +482,7 @@ export class TwitterApiService {
           toast.success("Successfully connected to Twitter");
           
           // Force page reload to reflect the new connection state
-          window.location.reload();
+          window.location.href = "/settings";
         }
       } catch (error) {
         console.error("TwitterApiService: Error handling auth success:", error);
