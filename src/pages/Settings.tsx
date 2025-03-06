@@ -6,10 +6,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase, getCallbackUrl } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
 import { TwitterApiService } from '@/services/twitterApiService';
 import { toast } from 'sonner';
-import { PlusCircle, Twitter, Instagram, CheckCircle, AlertCircle } from 'lucide-react';
+import { PlusCircle, Twitter, Instagram, CheckCircle } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 const Settings = () => {
@@ -112,10 +112,7 @@ const Settings = () => {
       console.log('Initiating Twitter authentication...');
       const twitterService = new TwitterApiService(session.user.id);
       
-      const callbackUrl = 'https://fxzamjowvpnyuxthusib.supabase.co/auth/v1/callback';
-      console.log(`Using Twitter callback URL: ${callbackUrl}`);
-      
-      const authURL = await twitterService.initiateAuth(callbackUrl);
+      const authURL = await twitterService.initiateAuth();
       
       window.location.href = authURL;
       toast.info('Redirecting to Twitter for authentication...');
@@ -138,7 +135,8 @@ const Settings = () => {
       toast.info('Processing Twitter authentication...');
       
       const username = "twitter_user";
-      await supabase.from('platform_connections').upsert({
+      
+      const { error } = await supabase.from('platform_connections').upsert({
         user_id: session.user.id,
         platform: "twitter" as "twitter" | "instagram",
         access_token: ACCESS_TOKEN_PLACEHOLDER,
@@ -147,6 +145,10 @@ const Settings = () => {
         connected: true,
         updated_at: new Date().toISOString()
       });
+      
+      if (error) {
+        throw error;
+      }
       
       toast.success('Twitter account connected successfully!');
       loadConnections();

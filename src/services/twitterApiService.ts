@@ -410,20 +410,15 @@ export class TwitterApiService {
   /**
    * Initialize Twitter OAuth flow with the correct callback URL
    */
-  async initiateAuth(callbackUrl?: string): Promise<string> {
+  async initiateAuth(): Promise<string> {
     try {
       console.log("TwitterApiService: Initiating Twitter OAuth flow");
       
-      // IMPORTANT: This must match exactly what's registered in your Twitter Developer Portal
-      // Do not modify this URL unless you've updated your Twitter Developer Portal settings
-      const appCallbackUrl = 'https://fxzamjowvpnyuxthusib.supabase.co/auth/v1/callback';
-      console.log(`TwitterApiService: Using callback URL: ${appCallbackUrl}`);
-      
+      // Do not send a custom callback - rely on the edge function to use the environment variable
       const response = await supabase.functions.invoke('twitter-integration', {
         method: 'POST',
         body: { 
-          endpoint: 'auth',
-          callbackUrl: appCallbackUrl
+          endpoint: 'auth'
         }
       });
       
