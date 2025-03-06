@@ -114,9 +114,10 @@ const Settings = () => {
       const twitterService = new TwitterApiService(session.user.id);
       
       // Get the application URL for the callback
-      const appUrl = window.location.origin;
-      const callbackUrl = `${appUrl}/settings`;
-      console.log(`Using application callback URL: ${callbackUrl}`);
+      // Use a callback URL that matches what's registered in your Twitter Developer portal
+      // This URL MUST be registered in your Twitter Developer portal settings
+      const callbackUrl = 'https://fxzamjowvpnyuxthusib.supabase.co/auth/v1/callback';
+      console.log(`Using Twitter callback URL: ${callbackUrl}`);
       
       // Pass the callback URL to the Twitter service
       const authURL = await twitterService.initiateAuth(callbackUrl);

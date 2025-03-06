@@ -1,4 +1,3 @@
-
 import { createHmac } from "node:crypto";
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
@@ -116,7 +115,7 @@ function generateOAuthHeader(
 }
 
 // Request a temporary token from Twitter
-async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_secret: string }> {
+async function getRequestToken(callbackUrl: string): Promise<{ oauth_token: string, oauth_token_secret: string }> {
   // Use the v1.1 OAuth endpoints which are still operational
   const requestTokenURL = 'https://api.twitter.com/oauth/request_token';
   const method = 'POST';
@@ -124,7 +123,7 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
   // Important: The callback URL must be included in the OAuth parameters
   // but not in the body of the request
   const oauthParams: Record<string, string> = {
-    oauth_callback: encodeURIComponent(TWITTER_CALLBACK_URL)
+    oauth_callback: encodeURIComponent(callbackUrl)
   };
   
   // Generate authorization header
@@ -132,7 +131,7 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
   
   console.log("Requesting token with header:", authHeader);
   console.log("Request URL:", requestTokenURL);
-  console.log("Using callback URL:", TWITTER_CALLBACK_URL);
+  console.log("Using callback URL:", callbackUrl);
   
   try {
     const response = await fetch(requestTokenURL, {
@@ -175,9 +174,9 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
 }
 
 // Generate authentication URL
-async function generateTwitterAuthURL(): Promise<string> {
+async function generateTwitterAuthURL(callbackUrl: string): Promise<string> {
   try {
-    const { oauth_token } = await getRequestToken();
+    const { oauth_token } = await getRequestToken(callbackUrl);
     
     // Using the authorize endpoint which requires explicit user approval each time
     const authURL = `https://api.twitter.com/oauth/authorize?oauth_token=${oauth_token}`;
@@ -361,10 +360,10 @@ async function verifyCredentials(): Promise<any> {
   }
 }
 
-// Initiate OAuth authentication flow
-async function initiateOAuth(): Promise<any> {
+// Initiate OAuth authentication flow with a specific callback URL
+async function initiateOAuth(callbackUrl: string): Promise<any> {
   try {
-    const authURL = await generateTwitterAuthURL();
+    const authURL = await generateTwitterAuthURL(callbackUrl);
     return {
       success: true,
       authURL,
@@ -450,12 +449,7 @@ serve(async (req) => {
       const callbackUrl = (body as any).callbackUrl || TWITTER_CALLBACK_URL;
       console.log(`Using provided callback URL: ${callbackUrl}`);
       
-      // Override the TWITTER_CALLBACK_URL for this request if a different one is provided
-      if (callbackUrl !== TWITTER_CALLBACK_URL) {
-        console.log(`Overriding default callback URL for this request`);
-      }
-      
-      const result = await initiateOAuth();
+      const result = await initiateOAuth(callbackUrl);
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

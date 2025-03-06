@@ -414,8 +414,9 @@ export class TwitterApiService {
     try {
       console.log("TwitterApiService: Initiating Twitter OAuth flow");
       
-      // Use the provided callback URL or fall back to the current page URL
-      const appCallbackUrl = callbackUrl || (typeof window !== 'undefined' ? window.location.href : getCallbackUrl());
+      // Use the provided callback URL or fall back to the registered Twitter callback URL
+      // This must match what's registered in your Twitter Developer account
+      const appCallbackUrl = callbackUrl || 'https://fxzamjowvpnyuxthusib.supabase.co/auth/v1/callback';
       console.log(`TwitterApiService: Using callback URL: ${appCallbackUrl}`);
       
       const response = await supabase.functions.invoke('twitter-integration', {
