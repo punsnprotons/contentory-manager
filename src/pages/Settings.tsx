@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { TwitterApiService } from '@/services/twitterApiService';
 import { toast } from 'sonner';
-import { PlusCircle, Twitter, Instagram, CheckCircle, Loader2 } from 'lucide-react';
+import { PlusCircle, Twitter, Instagram, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 const Settings = () => {
@@ -29,21 +29,29 @@ const Settings = () => {
   
   console.log("Settings component rendering:", { session, user, authLoading });
   
+  // Load settings when component mounts or auth state changes
   useEffect(() => {
     console.log("Settings component mounted, auth status:", { session, authLoading, user });
     
+    // Only load data if we have a session and are not in loading state
     if (!authLoading && session?.user) {
-      loadUserSettings();
-      loadConnections();
-      
-      const params = new URLSearchParams(location.search);
-      const oauthToken = params.get('oauth_token');
-      const oauthVerifier = params.get('oauth_verifier');
-      
-      if (oauthToken && oauthVerifier) {
-        console.log("Found OAuth params, processing Twitter callback:", { oauthToken, oauthVerifier });
-        navigate('/settings', { replace: true });
-        handleTwitterCallback(oauthToken, oauthVerifier);
+      try {
+        loadUserSettings();
+        loadConnections();
+        
+        // Check for OAuth callback params
+        const params = new URLSearchParams(location.search);
+        const oauthToken = params.get('oauth_token');
+        const oauthVerifier = params.get('oauth_verifier');
+        
+        if (oauthToken && oauthVerifier) {
+          console.log("Found OAuth params, processing Twitter callback:", { oauthToken, oauthVerifier });
+          navigate('/settings', { replace: true });
+          handleTwitterCallback(oauthToken, oauthVerifier);
+        }
+      } catch (error) {
+        console.error("Error in Settings useEffect:", error);
+        setPageError("An error occurred while loading settings. Please try refreshing the page.");
       }
     }
   }, [session, authLoading, location]);
@@ -55,7 +63,7 @@ const Settings = () => {
         .from('user_settings')
         .select('*')
         .eq('user_id', session?.user.id)
-        .single();
+        .maybeSingle();
         
       if (error) {
         console.error('Error loading user settings:', error);
@@ -70,17 +78,24 @@ const Settings = () => {
       }
     } catch (error) {
       console.error('Exception in loadUserSettings:', error);
-      setPageError("Failed to load user settings. Please try refreshing the page.");
+      // Don't set page error, just use defaults
     }
   };
   
   const loadConnections = async () => {
     try {
       console.log("Loading platform connections for user:", session?.user.id);
+      
+      // Safety check for session user
+      if (!session?.user?.id) {
+        console.warn("No user ID found in session, using default connections");
+        return;
+      }
+      
       const { data, error } = await supabase
         .from('platform_connections')
         .select('platform, connected, username')
-        .eq('user_id', session?.user.id);
+        .eq('user_id', session.user.id);
         
       if (error) {
         console.error('Error loading connections:', error);
@@ -90,27 +105,35 @@ const Settings = () => {
       
       if (data && data.length > 0) {
         console.log("Platform connections loaded:", data);
-        setConnections(data);
+        setConnections(prevConnections => {
+          // Merge loaded data with defaults to ensure we have all platforms
+          const platformMap = new Map(data.map(conn => [conn.platform, conn]));
+          
+          return prevConnections.map(conn => {
+            const loadedConn = platformMap.get(conn.platform);
+            return loadedConn ? loadedConn : conn;
+          });
+        });
       } else {
         console.log("No platform connections found, using defaults");
-        setConnections([
-          { platform: 'twitter', connected: false },
-          { platform: 'instagram', connected: false }
-        ]);
       }
     } catch (error) {
       console.error('Exception in loadConnections:', error);
-      setPageError("Failed to load social connections. Please try refreshing the page.");
+      // Don't set page error, just use defaults
     }
   };
   
   const saveSettings = async () => {
     setLoading(true);
     try {
+      if (!session?.user?.id) {
+        throw new Error('User is not logged in');
+      }
+      
       const { error } = await supabase
         .from('user_settings')
         .upsert({
-          user_id: session?.user.id,
+          user_id: session.user.id,
           enable_notifications: notifications,
           theme: darkMode ? 'dark' : 'light'
         });
@@ -258,6 +281,7 @@ const Settings = () => {
         </div>
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
+            <AlertCircle className="h-12 w-12 text-destructive mb-4" />
             <p className="text-lg text-center text-destructive mb-4">{pageError}</p>
             <Button onClick={() => window.location.reload()}>Refresh Page</Button>
           </CardContent>
@@ -266,6 +290,7 @@ const Settings = () => {
     );
   }
 
+  // Main content - only render if we have a session and are not loading
   return (
     <div className="container mx-auto py-6 space-y-8">
       <div className="flex justify-between items-center">
@@ -302,7 +327,12 @@ const Settings = () => {
               
               <div className="pt-4">
                 <Button onClick={saveSettings} disabled={loading}>
-                  {loading ? 'Saving...' : 'Save Settings'}
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : 'Save Settings'}
                 </Button>
               </div>
             </CardContent>
@@ -345,7 +375,12 @@ const Settings = () => {
                             onClick={importTwitterTweets}
                             disabled={importLoading || connection.platform !== 'twitter'}
                           >
-                            {importLoading ? 'Importing...' : 'Import Posts'}
+                            {importLoading ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Importing...
+                              </>
+                            ) : 'Import Posts'}
                           </Button>
                           <CheckCircle className="h-5 w-5 text-green-500" />
                         </>
@@ -356,7 +391,11 @@ const Settings = () => {
                           onClick={connection.platform === 'twitter' ? connectTwitter : undefined}
                           disabled={loading || connection.platform !== 'twitter'}
                         >
-                          <PlusCircle className="h-4 w-4 mr-2" />
+                          {loading && connection.platform === 'twitter' ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <PlusCircle className="h-4 w-4 mr-2" />
+                          )}
                           Connect
                         </Button>
                       )}
@@ -391,7 +430,12 @@ const Settings = () => {
               
               <div className="pt-4">
                 <Button onClick={saveSettings} disabled={loading}>
-                  {loading ? 'Saving...' : 'Save Settings'}
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : 'Save Settings'}
                 </Button>
               </div>
             </CardContent>
