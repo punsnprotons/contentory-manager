@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
@@ -44,7 +45,7 @@ export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Pro
       };
     }
     
-    // Call the twitter-refresh edge function instead of twitter-api
+    // Call the twitter-refresh edge function
     const { data, error } = await supabase.functions.invoke('twitter-refresh', {
       method: 'POST',
       body: { userId: userData.id },

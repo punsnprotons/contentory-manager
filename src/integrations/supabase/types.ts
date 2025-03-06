@@ -631,6 +631,14 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      collect_weekly_twitter_statistics: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      refresh_all_twitter_data: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
     }
     Enums: {
       content_intent: "promotional" | "feature" | "news" | "poll"
