@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 
@@ -110,7 +109,7 @@ export class TwitterApiService {
               user_id: this.userId,
               platform: 'twitter',
               follower_count: profileData.data.public_metrics.followers_count,
-              recorded_at: new Date().toISOString().split('T')[0]
+              recorded_at: new Date().toISOString().split('T')[0] // Fix: Convert Date to string in ISO format
             });
             
           if (followerError) {
@@ -124,7 +123,7 @@ export class TwitterApiService {
             .from('platform_connections')
             .update({
               profile_image: profileData.data.profile_image_url,
-              updated_at: new Date()
+              updated_at: new Date() // This is fine since the database handles Date objects
             })
             .eq('user_id', this.userId)
             .eq('platform', 'twitter');
