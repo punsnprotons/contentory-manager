@@ -12,6 +12,7 @@ export class TwitterApiService {
   private accessToken?: string;
   private accessTokenSecret?: string;
   private isInitialized = false;
+  private statisticsInterval: NodeJS.Timeout | null = null;
 
   constructor(userId: string) {
     this.userId = userId;
@@ -663,6 +664,248 @@ export class TwitterApiService {
   }
 
   /**
+   * Collect period statistics for a given number of days
+   */
+  async collectPeriodStatistics(periodDays = 30): Promise<{
+    periodStart: Date;
+    periodEnd: Date;
+    totalFollowers: number;
+    postCount: number;
+    engagementRate: number;
+    avgReachPerPost: number;
+  } | null> {
+    console.log(`TwitterApiService: collectPeriodStatistics - isInitialized: ${this.isInitialized}`);
+    
+    if (!this.isInitialized) {
+      console.error("TwitterApiService: Cannot collect period statistics - service not initialized");
+      throw new Error('Twitter service not initialized');
+    }
+    
+    try {
+      console.log(`TwitterApiService: Collecting ${periodDays} day period statistics for user: ${this.userId}`);
+      
+      const periodStart = new Date();
+      periodStart.setDate(periodStart.getDate() - periodDays);
+      const periodEnd = new Date();
+      
+      // Get follower counts
+      const { data: followerData, error: followerError } = await supabase
+        .from('follower_metrics')
+        .select('follower_count')
+        .eq('user_id', this.userId)
+        .eq('platform', 'twitter')
+        .order('recorded_at', { ascending: false })
+        .limit(1)
+        .single();
+        
+      if (followerError && followerError.code !== 'PGRST116') {
+        console.error("TwitterApiService: Error fetching follower metrics:", followerError);
+        // Continue with a default value instead of throwing
+      }
+      
+      const totalFollowers = followerData?.follower_count || 0;
+      console.log(`TwitterApiService: Using follower count of ${totalFollowers}`);
+      
+      // Get content posted in period
+      const { data: contentData, error: contentError } = await supabase
+        .from('content')
+        .select('id')
+        .eq('user_id', this.userId)
+        .eq('platform', 'twitter')
+        .eq('status', 'published')
+        .gte('published_at', periodStart.toISOString())
+        .lte('published_at', periodEnd.toISOString());
+        
+      if (contentError) {
+        console.error("TwitterApiService: Error fetching content in period:", contentError);
+        throw contentError;
+      }
+      
+      const postCount = contentData?.length || 0;
+      console.log(`TwitterApiService: Found ${postCount} posts in period`);
+      
+      // Get engagement rate
+      const { data: engagementData, error: engagementError } = await supabase
+        .from('engagement_metrics')
+        .select('engagement_rate')
+        .eq('user_id', this.userId)
+        .eq('platform', 'twitter')
+        .order('recorded_at', { ascending: false })
+        .limit(1)
+        .single();
+        
+      if (engagementError && engagementError.code !== 'PGRST116') {
+        console.error("TwitterApiService: Error fetching engagement metrics:", engagementError);
+        // Continue with a default value instead of throwing
+      }
+      
+      const engagementRate = engagementData?.engagement_rate || 0;
+      console.log(`TwitterApiService: Using engagement rate of ${engagementRate}`);
+      
+      // Get average reach per post
+      const { data: contentMetricsData, error: contentMetricsError } = await supabase
+        .from('content')
+        .select(`
+          id,
+          content_metrics (
+            reach
+          )
+        `)
+        .eq('user_id', this.userId)
+        .eq('platform', 'twitter')
+        .eq('status', 'published')
+        .gte('published_at', periodStart.toISOString())
+        .lte('published_at', periodEnd.toISOString());
+        
+      if (contentMetricsError) {
+        console.error("TwitterApiService: Error fetching content metrics for reach calculation:", contentMetricsError);
+        throw contentMetricsError;
+      }
+      
+      let totalReach = 0;
+      let reachCount = 0;
+      
+      if (contentMetricsData) {
+        for (const content of contentMetricsData) {
+          if (content.content_metrics && Array.isArray(content.content_metrics) && content.content_metrics.length > 0) {
+            totalReach += content.content_metrics[0].reach || 0;
+            reachCount++;
+          }
+        }
+      }
+      
+      const avgReachPerPost = reachCount > 0 ? Math.round(totalReach / reachCount) : 0;
+      console.log(`TwitterApiService: Calculated average reach per post: ${avgReachPerPost}`);
+      
+      // Check if platform_statistics record exists for this period
+      const { data: existingData, error: existingError } = await supabase
+        .from('platform_statistics')
+        .select('id')
+        .eq('user_id', this.userId)
+        .eq('platform', 'twitter')
+        .eq('period_start', periodStart.toISOString().split('T')[0])
+        .eq('period_end', periodEnd.toISOString().split('T')[0]);
+        
+      if (existingError) {
+        console.error("TwitterApiService: Error checking existing platform statistics:", existingError);
+        throw existingError;
+      }
+      
+      if (!existingData || existingData.length === 0) {
+        // Create new platform_statistics record
+        console.log("TwitterApiService: Creating new platform statistics record");
+        const { error: insertError } = await supabase
+          .from('platform_statistics')
+          .insert({
+            user_id: this.userId,
+            platform: 'twitter',
+            period_start: periodStart.toISOString().split('T')[0],
+            period_end: periodEnd.toISOString().split('T')[0],
+            total_followers: totalFollowers,
+            post_count: postCount,
+            engagement_rate: engagementRate,
+            avg_reach_per_post: avgReachPerPost
+          });
+          
+        if (insertError) {
+          console.error("TwitterApiService: Error inserting platform statistics:", insertError);
+          throw insertError;
+        }
+      } else {
+        // Update existing platform_statistics record
+        console.log("TwitterApiService: Updating existing platform statistics record");
+        const { error: updateError } = await supabase
+          .from('platform_statistics')
+          .update({
+            total_followers: totalFollowers,
+            post_count: postCount,
+            engagement_rate: engagementRate,
+            avg_reach_per_post: avgReachPerPost,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingData[0].id);
+          
+        if (updateError) {
+          console.error("TwitterApiService: Error updating platform statistics:", updateError);
+          throw updateError;
+        }
+      }
+      
+      console.log("TwitterApiService: Successfully collected and stored period statistics");
+      return {
+        periodStart,
+        periodEnd,
+        totalFollowers,
+        postCount,
+        engagementRate,
+        avgReachPerPost
+      };
+    } catch (error) {
+      console.error('TwitterApiService: Error collecting period statistics:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update all statistics (engagement metrics, daily engagement, period statistics)
+   */
+  async updateAllStatistics(): Promise<void> {
+    try {
+      console.log("TwitterApiService: Starting update of all statistics");
+      
+      // Calculate engagement metrics
+      await this.calculateEngagementMetrics();
+      
+      // Analyze daily engagement
+      await this.analyzeDailyEngagement();
+      
+      // Collect period statistics for 30 days
+      await this.collectPeriodStatistics(30);
+      
+      // Collect period statistics for 7 days
+      await this.collectPeriodStatistics(7);
+      
+      console.log("TwitterApiService: Successfully updated all statistics");
+    } catch (error) {
+      console.error("TwitterApiService: Error updating all statistics:", error);
+      // Don't re-throw, just log - we don't want to disrupt the user experience if statistics fail
+    }
+  }
+
+  /**
+   * Start periodic statistics updates
+   */
+  startPeriodicStatisticsUpdates(intervalMinutes = 60): void {
+    // Clear any existing interval
+    this.stopPeriodicStatisticsUpdates();
+    
+    console.log(`TwitterApiService: Starting periodic statistics updates every ${intervalMinutes} minutes`);
+    
+    // Update immediately upon starting
+    this.updateAllStatistics().catch(error => {
+      console.error("TwitterApiService: Initial statistics update failed:", error);
+    });
+    
+    // Then set up the interval
+    this.statisticsInterval = setInterval(() => {
+      this.updateAllStatistics().catch(error => {
+        console.error("TwitterApiService: Periodic statistics update failed:", error);
+      });
+    }, intervalMinutes * 60 * 1000);
+  }
+
+  /**
+   * Stop periodic statistics updates
+   */
+  stopPeriodicStatisticsUpdates(): void {
+    if (this.statisticsInterval) {
+      console.log("TwitterApiService: Stopping periodic statistics updates");
+      clearInterval(this.statisticsInterval);
+      this.statisticsInterval = null;
+    }
+  }
+
+  /**
    * Manually trigger tweet fetching and import
    * This can be called from a settings page
    */
@@ -832,7 +1075,22 @@ export class TwitterApiService {
       console.log(`TwitterApiService: Creating service for user ID: ${session.user.id}`);
       const service = new TwitterApiService(session.user.id);
       await service.initialize();
-      console.log("TwitterApiService: Service successfully created and initialized");
+      
+      // Start collecting statistics periodically
+      service.startPeriodicStatisticsUpdates();
+      
+      // Set up auth state change listener to handle sign out and clean up
+      supabase.auth.onAuthStateChange((event, _session) => {
+        if (event === 'SIGNED_OUT') {
+          console.log("TwitterApiService: User signed out, stopping statistics updates");
+          service.stopPeriodicStatisticsUpdates();
+        } else if (event === 'SIGNED_IN') {
+          console.log("TwitterApiService: User signed in, starting statistics updates");
+          service.startPeriodicStatisticsUpdates();
+        }
+      });
+      
+      console.log("TwitterApiService: Service successfully created and initialized with statistics updates");
       return service;
     } catch (error) {
       console.error('TwitterApiService: Error creating service:', error);
