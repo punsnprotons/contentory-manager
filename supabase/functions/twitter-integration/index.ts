@@ -6,7 +6,7 @@ const API_KEY = Deno.env.get("TWITTER_API_KEY")?.trim();
 const API_SECRET = Deno.env.get("TWITTER_API_SECRET")?.trim();
 const ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
 const ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")?.trim();
-const CALLBACK_URL = "https://fxzamjowvpnyuxthusib.supabase.co/functions/v1/twitter-callback";
+const CALLBACK_URL = "https://fxzamjowvpnyuxthusib.supabase.co/auth/v1/callback";
 
 // CORS headers for browser requests
 const corsHeaders = {
@@ -376,44 +376,6 @@ async function initiateOAuth(): Promise<any> {
   }
 }
 
-// Handle the OAuth callback from Twitter
-async function handleOAuthCallback(url: URL): Promise<Response> {
-  const oauth_token = url.searchParams.get('oauth_token');
-  const oauth_verifier = url.searchParams.get('oauth_verifier');
-  
-  if (!oauth_token || !oauth_verifier) {
-    return new Response(JSON.stringify({ 
-      error: "Missing required OAuth parameters" 
-    }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" }
-    });
-  }
-  
-  try {
-    // Redirect to the application with token information
-    const redirectUrl = new URL(url.origin);
-    redirectUrl.pathname = "/settings"; // Redirect back to settings page
-    redirectUrl.searchParams.set('auth_success', 'true');
-    
-    return new Response(null, {
-      status: 302,
-      headers: { 
-        ...corsHeaders,
-        "Location": redirectUrl.toString()
-      }
-    });
-  } catch (error) {
-    console.error("Error handling OAuth callback:", error);
-    return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : "Unknown error" 
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" }
-    });
-  }
-}
-
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -428,11 +390,6 @@ serve(async (req) => {
     const endpoint = url.pathname.split('/').pop() || '';
     
     console.log(`Processing request for endpoint: ${endpoint}, method: ${req.method}`);
-    
-    // Check if this is a callback from Twitter OAuth
-    if (url.searchParams.has('oauth_token') && url.searchParams.has('oauth_verifier')) {
-      return handleOAuthCallback(url);
-    }
     
     // For POST requests, parse the JSON body
     let body = {};

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -10,7 +11,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { TwitterApiService } from '@/services/twitterApiService';
 import { toast } from 'sonner';
 import { PlusCircle, Twitter, Instagram, CheckCircle, AlertCircle } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
 
 const Settings = () => {
   const [loading, setLoading] = useState(false);
@@ -19,54 +19,13 @@ const Settings = () => {
   const [darkMode, setDarkMode] = useState(false);
   const [connections, setConnections] = useState<{platform: string, connected: boolean, username?: string}[]>([]);
   const { session } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
   
   useEffect(() => {
     if (session?.user) {
       loadUserSettings();
       loadConnections();
-      
-      // Handle OAuth callback
-      const searchParams = new URLSearchParams(location.search);
-      const authSuccess = searchParams.get('auth_success');
-      const oauthToken = searchParams.get('oauth_token');
-      const oauthVerifier = searchParams.get('oauth_verifier');
-      
-      if (authSuccess === 'true' && oauthToken && oauthVerifier) {
-        handleTwitterCallback(oauthToken, oauthVerifier);
-        
-        // Clear query parameters
-        navigate('/settings', { replace: true });
-      }
     }
-  }, [session, location.search]);
-
-  const handleTwitterCallback = async (oauthToken: string, oauthVerifier: string) => {
-    try {
-      toast.info('Processing Twitter authorization...');
-      
-      // Store the connection in the database - simplifying for now
-      const { error } = await supabase
-        .from('platform_connections')
-        .upsert({
-          user_id: session?.user.id,
-          platform: 'twitter',
-          connected: true,
-          username: 'twitter_user', // This would be replaced with the actual username
-          access_token: oauthToken,
-          refresh_token: oauthVerifier
-        });
-        
-      if (error) throw error;
-      
-      toast.success('Twitter account connected successfully!');
-      loadConnections(); // Refresh connections list
-    } catch (error) {
-      console.error('Error handling Twitter callback:', error);
-      toast.error('Failed to connect Twitter account');
-    }
-  };
+  }, [session]);
 
   const loadUserSettings = async () => {
     try {
