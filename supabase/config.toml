@@ -33,7 +33,7 @@ enabled = true
 
 [auth]
 enabled = true
-site_url = "http://localhost:54321" 
+site_url = "https://fxzamjowvpnyuxthusib.supabase.co" 
 additional_redirect_urls = ["https://fxzamjowvpnyuxthusib.supabase.co", "https://fxzamjowvpnyuxthusib.supabase.co/settings", "https://fxzamjowvpnyuxthusib.supabase.co/functions/v1/twitter-integration/callback"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
@@ -49,13 +49,13 @@ enable_confirmations = false
 enabled = true
 client_id = "env(SUPABASE_AUTH_GITHUB_CLIENT_ID)"
 secret = "env(SUPABASE_AUTH_GITHUB_SECRET)"
-redirect_uri = "http://localhost:54321/auth/v1/callback"
+redirect_uri = "https://fxzamjowvpnyuxthusib.supabase.co/auth/v1/callback"
 
 [auth.external.google]
 enabled = true
 client_id = "env(SUPABASE_AUTH_GOOGLE_CLIENT_ID)"
 secret = "env(SUPABASE_AUTH_GOOGLE_SECRET)"
-redirect_uri = "http://localhost:54321/auth/v1/callback"
+redirect_uri = "https://fxzamjowvpnyuxthusib.supabase.co/auth/v1/callback"
 
 [functions]
 [functions.twitter-integration]
