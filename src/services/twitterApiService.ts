@@ -241,6 +241,125 @@ export class TwitterApiService {
   }
 
   /**
+   * Fetch user tweets and store them in the database
+   */
+  async fetchUserTweets(limit = 10): Promise<any> {
+    console.log(`TwitterApiService: fetchUserTweets - isInitialized: ${this.isInitialized}, username: ${this.username}`);
+    
+    if (!this.isInitialized) {
+      console.error("TwitterApiService: Cannot fetch tweets - service not initialized");
+      throw new Error('Twitter service not initialized');
+    }
+    
+    try {
+      console.log(`TwitterApiService: Fetching tweets for ${this.username} via edge function`);
+      
+      const response = await supabase.functions.invoke('twitter-integration', {
+        method: 'POST',
+        body: { 
+          endpoint: 'tweets',
+          limit
+        }
+      });
+      
+      console.log("TwitterApiService: Tweets response:", response);
+      
+      if (response.error) {
+        console.error("TwitterApiService: Error from edge function:", response.error);
+        throw new Error(response.error.message);
+      }
+      
+      const tweetsData = response.data;
+      
+      if (!tweetsData || !tweetsData.data || !Array.isArray(tweetsData.data)) {
+        console.error("TwitterApiService: Invalid response format from tweet fetch", tweetsData);
+        throw new Error('Invalid response format from tweet fetch');
+      }
+      
+      console.log(`TwitterApiService: Retrieved ${tweetsData.data.length} tweets`);
+      
+      // Store each tweet in the database
+      for (const tweet of tweetsData.data) {
+        // Determine media type and URL if present
+        let mediaType = 'text';
+        let mediaUrl = null;
+        
+        if (tweet.attachments && tweet.attachments.media_keys && tweetsData.includes?.media) {
+          const mediaKey = tweet.attachments.media_keys[0];
+          const media = tweetsData.includes.media.find(m => m.media_key === mediaKey);
+          
+          if (media) {
+            mediaType = media.type === 'photo' ? 'image' : media.type;
+            mediaUrl = media.url || media.preview_image_url;
+          }
+        }
+        
+        // Store in content table
+        const { data: contentData, error: contentError } = await supabase
+          .from('content')
+          .insert({
+            user_id: this.userId,
+            platform: 'twitter',
+            type: mediaType,
+            intent: 'news', // Default intent
+            status: 'published',
+            content: tweet.text,
+            media_url: mediaUrl,
+            published_at: new Date(tweet.created_at).toISOString()
+          })
+          .select('id')
+          .single();
+        
+        if (contentError) {
+          console.error(`TwitterApiService: Error storing tweet content:`, contentError);
+          continue;
+        }
+        
+        // Store metrics if we have public_metrics
+        if (tweet.public_metrics) {
+          const { error: metricsError } = await supabase
+            .from('content_metrics')
+            .insert({
+              content_id: contentData.id,
+              likes: tweet.public_metrics.like_count || 0,
+              comments: tweet.public_metrics.reply_count || 0,
+              shares: tweet.public_metrics.retweet_count || 0,
+              views: tweet.public_metrics.impression_count || 0,
+              impressions: tweet.public_metrics.impression_count || 0,
+              reach: tweet.public_metrics.impression_count || 0 // Twitter doesn't provide exact reach
+            });
+            
+          if (metricsError) {
+            console.error(`TwitterApiService: Error storing tweet metrics:`, metricsError);
+          }
+        }
+        
+        // Store activity history
+        const { error: activityError } = await supabase
+          .from('activity_history')
+          .insert({
+            user_id: this.userId,
+            content_id: contentData.id,
+            platform: 'twitter',
+            activity_type: 'post',
+            activity_detail: { tweet_id: tweet.id },
+            occurred_at: new Date(tweet.created_at).toISOString()
+          });
+          
+        if (activityError) {
+          console.error(`TwitterApiService: Error storing activity history:`, activityError);
+        }
+      }
+      
+      console.log("TwitterApiService: Successfully stored tweets in the database");
+      return tweetsData.data;
+    } catch (error) {
+      console.error('TwitterApiService: Error fetching and storing user tweets:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Verify the Twitter credentials
    */
   async verifyCredentials(): Promise<any> {

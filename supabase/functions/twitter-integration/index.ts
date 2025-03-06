@@ -291,6 +291,56 @@ async function getUserProfile() {
   }
 }
 
+// Get user tweets
+async function getUserTweets(limit = 10) {
+  // First get the user ID from the user profile
+  const userProfile = await getUser();
+  const userId = userProfile.data.id;
+  
+  if (!userId) {
+    throw new Error("Could not determine user ID");
+  }
+  
+  console.log(`Fetching tweets for user ID: ${userId}, limit: ${limit}`);
+  
+  // Construct URL with query parameters
+  const params = new URLSearchParams({
+    'max_results': limit.toString(),
+    'tweet.fields': 'created_at,public_metrics,attachments,entities',
+    'expansions': 'attachments.media_keys',
+    'media.fields': 'url,preview_image_url,type'
+  });
+  
+  const url = `${BASE_URL}/users/${userId}/tweets?${params.toString()}`;
+  const method = "GET";
+  const authHeader = generateOAuthHeader(method, url, {}, ACCESS_TOKEN, ACCESS_TOKEN_SECRET);
+  
+  console.log("Getting user tweets with URL:", url);
+  
+  try {
+    const response = await fetch(url, {
+      method: method,
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+      },
+    });
+    
+    const responseText = await response.text();
+    console.log("Response Status:", response.status);
+    console.log("Response Body:", responseText);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
+    }
+    
+    return JSON.parse(responseText);
+  } catch (error) {
+    console.error("Error fetching tweets:", error);
+    throw error;
+  }
+}
+
 // Verify Twitter credentials
 async function verifyCredentials(): Promise<any> {
   try {
@@ -386,6 +436,13 @@ serve(async (req) => {
       return new Response(JSON.stringify(profile), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    } else if (endpoint === 'tweets' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'tweets') {
+      // Get user tweets
+      const limit = (body as any).limit || 10;
+      const tweets = await getUserTweets(limit);
+      return new Response(JSON.stringify(tweets), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     } else if (endpoint === 'auth' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'auth') {
       // Initiate OAuth flow
       const result = await initiateOAuth();
@@ -400,6 +457,7 @@ serve(async (req) => {
           "/tweet": "Send a tweet",
           "/user": "Get user profile",
           "/profile": "Get detailed profile with follower metrics",
+          "/tweets": "Get user tweets",
           "/auth": "Initiate OAuth flow"
         },
         message: "Twitter Integration API"
