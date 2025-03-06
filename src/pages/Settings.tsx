@@ -474,12 +474,18 @@ const Settings: React.FC = () => {
   };
 
   const fetchTwitterProfile = async () => {
+    console.log("Settings: fetchTwitterProfile - Starting profile fetch process");
+    console.log("Settings: Current connections:", connections);
+    
     try {
       const twitterConnection = connections.find(conn => 
         conn.platform === 'twitter' && conn.connected === true
       );
       
+      console.log("Settings: Found Twitter connection?", twitterConnection);
+      
       if (!twitterConnection) {
+        console.log("Settings: No active Twitter connection found");
         toast({
           title: "Not Connected",
           description: "You haven't connected to Twitter yet. Please connect first.",
@@ -488,11 +494,26 @@ const Settings: React.FC = () => {
         return;
       }
       
+      console.log("Settings: User profile ID:", userProfile?.id);
+      
+      if (!userProfile?.id) {
+        console.error("Settings: No user profile ID available");
+        toast({
+          title: "User Profile Missing",
+          description: "Cannot fetch Twitter profile without a user ID.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
       setIsLoadingProfile(true);
       
-      const initResult = await TwitterApiService.verifyServiceInitialization(userProfile?.id || '');
+      console.log("Settings: Verifying service initialization for user ID:", userProfile.id);
+      const initResult = await TwitterApiService.verifyServiceInitialization(userProfile.id);
+      console.log("Settings: Service initialization result:", initResult);
       
       if (!initResult.success) {
+        console.error("Settings: Service initialization failed:", initResult.message);
         toast({
           title: "Service Not Available",
           description: initResult.message || "Twitter service is not initialized properly.",
@@ -502,12 +523,15 @@ const Settings: React.FC = () => {
         return;
       }
       
+      console.log("Settings: Creating Twitter service with session:", !!session);
       let service;
       if (session) {
         service = await TwitterApiService.create(session);
+        console.log("Settings: Service created:", !!service);
       }
       
       if (!service) {
+        console.error("Settings: Failed to create Twitter service");
         toast({
           title: "Service Not Available",
           description: "Twitter service could not be initialized. Please reconnect to Twitter.",
@@ -517,7 +541,9 @@ const Settings: React.FC = () => {
         return;
       }
       
+      console.log("Settings: Fetching profile data with service");
       const profileData = await service.fetchProfileData();
+      console.log("Settings: Profile data fetched:", profileData);
       
       if (profileData) {
         toast({
@@ -530,6 +556,7 @@ const Settings: React.FC = () => {
           .select('*');
           
         if (refreshedConnections) {
+          console.log("Settings: Updating connections with refreshed data");
           setConnections(refreshedConnections);
         }
       } else {
@@ -540,7 +567,7 @@ const Settings: React.FC = () => {
         });
       }
     } catch (error) {
-      console.error('Error fetching Twitter profile data:', error);
+      console.error('Settings: Error fetching Twitter profile data:', error);
       toast({
         title: "Profile Data Error",
         description: error instanceof Error ? error.message : "An error occurred while fetching profile data.",

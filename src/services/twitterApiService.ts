@@ -13,12 +13,15 @@ export class TwitterApiService {
 
   constructor(userId: string) {
     this.userId = userId;
+    console.log(`TwitterApiService: Constructor initialized with userId: ${userId}`);
   }
 
   /**
    * Initialize the Twitter service by loading credentials from the database
    */
   async initialize(): Promise<TwitterApiService> {
+    console.log(`TwitterApiService: Initializing service for userId: ${this.userId}`);
+    
     // Get user's Twitter connection from the database
     const { data: connection, error } = await supabase
       .from('platform_connections')
@@ -28,8 +31,11 @@ export class TwitterApiService {
       .eq('connected', true)
       .single();
     
+    console.log(`TwitterApiService: Query results - connection:`, connection, "error:", error);
+    
     if (error || !connection) {
       this.isInitialized = false;
+      console.error(`TwitterApiService: Initialization failed - ${error?.message || 'No connected Twitter account found'}`);
       throw new Error('No connected Twitter account found');
     }
     
@@ -37,6 +43,8 @@ export class TwitterApiService {
     this.accessToken = connection.access_token || undefined;
     this.accessTokenSecret = connection.refresh_token || undefined;
     this.isInitialized = true;
+    
+    console.log(`TwitterApiService: Successfully initialized for ${this.username}`);
     
     return this;
   }
@@ -105,18 +113,25 @@ export class TwitterApiService {
    * Fetch and store Twitter profile data
    */
   async fetchProfileData(): Promise<any> {
+    console.log(`TwitterApiService: fetchProfileData - isInitialized: ${this.isInitialized}`);
+    
     if (!this.isInitialized) {
+      console.error("TwitterApiService: Cannot fetch profile data - service not initialized");
       throw new Error('Twitter service not initialized');
     }
     
     try {
+      console.log("TwitterApiService: Fetching profile data via edge function");
       // Get user profile via the edge function
       const response = await supabase.functions.invoke('twitter-integration', {
         method: 'POST',
         body: { endpoint: 'profile' }
       });
       
+      console.log("TwitterApiService: Profile response:", response);
+      
       if (response.error) {
+        console.error("TwitterApiService: Error from edge function:", response.error);
         throw new Error(response.error.message);
       }
       
@@ -125,6 +140,8 @@ export class TwitterApiService {
       if (profileData && profileData.data) {
         // Store follower count in the database
         if (profileData.data.public_metrics && profileData.data.public_metrics.followers_count) {
+          console.log(`TwitterApiService: Storing follower count: ${profileData.data.public_metrics.followers_count}`);
+          
           const { error: followerError } = await supabase
             .from('follower_metrics')
             .insert({
@@ -135,12 +152,14 @@ export class TwitterApiService {
             });
             
           if (followerError) {
-            console.error('Error storing follower metrics:', followerError);
+            console.error('TwitterApiService: Error storing follower metrics:', followerError);
           }
         }
         
         // Update platform connection with profile image if available
         if (profileData.data.profile_image_url) {
+          console.log(`TwitterApiService: Updating profile image URL: ${profileData.data.profile_image_url}`);
+          
           const { error: updateError } = await supabase
             .from('platform_connections')
             .update({
@@ -151,14 +170,15 @@ export class TwitterApiService {
             .eq('platform', 'twitter');
             
           if (updateError) {
-            console.error('Error updating profile image:', updateError);
+            console.error('TwitterApiService: Error updating profile image:', updateError);
           }
         }
       }
       
+      console.log("TwitterApiService: Successfully fetched and processed profile data");
       return profileData.data;
     } catch (error) {
-      console.error('Error fetching and storing Twitter profile data:', error);
+      console.error('TwitterApiService: Error fetching and storing profile data:', error);
       throw error;
     }
   }
@@ -210,16 +230,18 @@ export class TwitterApiService {
    */
   static async create(session: Session | null): Promise<TwitterApiService | null> {
     if (!session?.user) {
-      console.log("No session available for Twitter service creation");
+      console.log("TwitterApiService: No session available for service creation");
       return null;
     }
     
     try {
+      console.log(`TwitterApiService: Creating service for user ID: ${session.user.id}`);
       const service = new TwitterApiService(session.user.id);
       await service.initialize();
+      console.log("TwitterApiService: Service successfully created and initialized");
       return service;
     } catch (error) {
-      console.error('Error creating Twitter service:', error);
+      console.error('TwitterApiService: Error creating service:', error);
       return null;
     }
   }
@@ -229,17 +251,17 @@ export class TwitterApiService {
    */
   static async verifyServiceInitialization(userId: string): Promise<{ success: boolean; message: string }> {
     try {
-      console.log(`Attempting to initialize TwitterApiService with userId: ${userId}`);
+      console.log(`TwitterApiService: Verifying initialization for userId: ${userId}`);
       const service = new TwitterApiService(userId);
       await service.initialize();
-      console.log(`TwitterApiService successfully initialized for user: ${userId}`);
+      console.log(`TwitterApiService: Verification successful for user: ${userId}`);
       
       return {
         success: true,
         message: `Twitter service successfully initialized with username: ${service.username}`
       };
     } catch (error) {
-      console.error('Error initializing TwitterApiService:', error);
+      console.error('TwitterApiService: Verification failed:', error);
       return {
         success: false,
         message: error instanceof Error ? error.message : 'Unknown error initializing Twitter service'
@@ -251,6 +273,7 @@ export class TwitterApiService {
 // Utility function to get an instance of the Twitter API service
 export async function getTwitterApiService(session: Session | null): Promise<TwitterApiService | null> {
   if (!session?.user) {
+    console.log("TwitterApiService: No session provided to getTwitterApiService");
     return null;
   }
   
