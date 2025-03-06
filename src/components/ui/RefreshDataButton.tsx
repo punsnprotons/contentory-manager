@@ -7,6 +7,9 @@ import { toast } from 'sonner';
 
 interface RefreshDataButtonProps {
   className?: string;
+  size?: "default" | "sm" | "lg" | "icon";
+  variant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
+  onRefreshComplete?: () => void;
 }
 
 interface RefreshResponse {
@@ -92,7 +95,12 @@ export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Pro
   }
 };
 
-const RefreshDataButton: React.FC<RefreshDataButtonProps> = ({ className }) => {
+const RefreshDataButton: React.FC<RefreshDataButtonProps> = ({ 
+  className, 
+  size = "sm", 
+  variant = "outline",
+  onRefreshComplete 
+}) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   
   const handleRefresh = async () => {
@@ -102,6 +110,9 @@ const RefreshDataButton: React.FC<RefreshDataButtonProps> = ({ className }) => {
       loading: 'Refreshing social media data...',
       success: (data) => {
         setIsRefreshing(false);
+        if (onRefreshComplete) {
+          onRefreshComplete();
+        }
         return `${data.message}`;
       },
       error: (err: Error | { message?: string } | unknown) => {
@@ -120,8 +131,8 @@ const RefreshDataButton: React.FC<RefreshDataButtonProps> = ({ className }) => {
   return (
     <Button 
       onClick={handleRefresh}
-      variant="outline"
-      size="sm"
+      variant={variant}
+      size={size}
       className={className}
       disabled={isRefreshing}
     >

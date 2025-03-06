@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -40,22 +39,17 @@ const Dashboard = () => {
     ? topPerformingContent[0] 
     : null;
 
-  const handleRefresh = async () => {
-    try {
-      toast.loading('Refreshing data...');
-      await refreshData();
-      toast.success('Data refreshed successfully');
-    } catch (error) {
-      console.error('Error refreshing data:', error);
-      toast.error('Failed to refresh data');
-    }
+  const handleRefreshComplete = () => {
+    refreshData();
   };
   
   return (
     <div className="container py-6 space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Dashboard</h1>
-        <RefreshDataButton />
+        <RefreshDataButton 
+          onRefreshComplete={handleRefreshComplete}
+        />
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { BarChart, Calendar, TrendingUp, Users, Activity } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +9,7 @@ import { usePostAnalytics } from "@/hooks/usePostAnalytics";
 import { useActivityHistory } from "@/hooks/useActivityHistory";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
+import RefreshDataButton from "@/components/ui/RefreshDataButton";
 
 const MetricCard = ({ title, value, change, icon: Icon, trend = "up" }) => (
   <Card>
@@ -49,12 +49,10 @@ const Analytics: React.FC = () => {
 
   const selectedPost = selectedPostId ? posts.find(post => post.id === selectedPostId) : null;
 
-  // Format numbers with commas
   const formatNumber = (num: number) => {
     return num.toLocaleString();
   };
   
-  // Count posts by platform
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
   
@@ -72,7 +70,10 @@ const Analytics: React.FC = () => {
     post.platform === 'twitter'
   ).length;
 
-  // Force a refresh of data when component mounts
+  const handleRefreshComplete = () => {
+    refreshData();
+  };
+
   useEffect(() => {
     console.log("Analytics page mounted, refreshing data");
     refreshData();
@@ -82,6 +83,11 @@ const Analytics: React.FC = () => {
     <div className="container-page animate-fade-in">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Analytics</h1>
+        <RefreshDataButton 
+          variant="default" 
+          size="default" 
+          onRefreshComplete={handleRefreshComplete} 
+        />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
@@ -115,7 +121,6 @@ const Analytics: React.FC = () => {
         />
       </div>
 
-      {/* Platform-specific metrics */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
