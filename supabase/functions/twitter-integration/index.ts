@@ -6,7 +6,7 @@ const API_KEY = Deno.env.get("TWITTER_API_KEY")?.trim();
 const API_SECRET = Deno.env.get("TWITTER_API_SECRET")?.trim();
 const ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
 const ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")?.trim();
-const CALLBACK_URL = Deno.env.get("TWITTER_CALLBACK_URL")?.trim() || "https://fxzamjowvpnyuxthusib.supabase.co/functions/v1/twitter-integration/callback";
+const CALLBACK_URL = "https://fxzamjowvpnyuxthusib.supabase.co/functions/v1/twitter-integration/callback";
 
 // CORS headers for browser requests
 const corsHeaders = {
@@ -118,18 +118,9 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
   const requestTokenURL = 'https://api.twitter.com/oauth/request_token';
   const method = 'POST';
   
-  // Generate a random state
-  const state = Math.random().toString(36).substring(2);
-  
-  // Store state in a cookie or session (for this example we'll add it to the callback URL)
-  const callbackWithState = `${CALLBACK_URL}?state=${state}`;
-  
-  console.log("Using callback URL with state:", callbackWithState);
-  
-  // CRITICAL FIX: Don't double-encode the callback URL
   // The callback URL should be properly encoded just once in the OAuth parameters
   const oauthParams: Record<string, string> = {
-    oauth_callback: callbackWithState
+    oauth_callback: CALLBACK_URL
   };
   
   // Generate authorization header
@@ -198,23 +189,12 @@ async function generateTwitterAuthURL(): Promise<string> {
 async function handleCallback(url: URL): Promise<any> {
   const oauth_token = url.searchParams.get("oauth_token");
   const oauth_verifier = url.searchParams.get("oauth_verifier");
-  const state = url.searchParams.get("state");
   
-  console.log("Received callback with parameters:", {
-    oauth_token,
-    oauth_verifier,
-    state
-  });
+  console.log("Received callback with token:", oauth_token, "and verifier:", oauth_verifier);
   
   if (!oauth_token || !oauth_verifier) {
     throw new Error("Missing oauth_token or oauth_verifier in callback");
   }
-  
-  // In a real implementation, you would verify the state parameter here
-  // to ensure it matches what you sent in the original request
-  // This helps prevent CSRF attacks
-  
-  console.log("Received callback with token:", oauth_token, "and verifier:", oauth_verifier);
   
   // Return success and include the origin of the request for dynamic redirect
   return {
