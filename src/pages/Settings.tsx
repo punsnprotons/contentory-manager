@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { TwitterApiService } from '@/services/twitterApiService';
 import { toast } from 'sonner';
-import { PlusCircle, Twitter, Instagram, CheckCircle } from 'lucide-react';
+import { PlusCircle, Twitter, Instagram, CheckCircle, Loader2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 const Settings = () => {
@@ -17,13 +17,19 @@ const Settings = () => {
   const [importLoading, setImportLoading] = useState(false);
   const [notifications, setNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
-  const [connections, setConnections] = useState<{platform: string, connected: boolean, username?: string}[]>([]);
-  const { session } = useAuth();
+  const [connections, setConnections] = useState<{platform: string, connected: boolean, username?: string}[]>([
+    { platform: 'twitter', connected: false },
+    { platform: 'instagram', connected: false }
+  ]);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const { session, loading: authLoading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   
   useEffect(() => {
-    if (session?.user) {
+    console.log("Settings component mounted, auth status:", { session, authLoading });
+    
+    if (!authLoading && session?.user) {
       loadUserSettings();
       loadConnections();
       
@@ -36,46 +42,61 @@ const Settings = () => {
         handleTwitterCallback(oauthToken, oauthVerifier);
       }
     }
-  }, [session, location]);
+  }, [session, authLoading, location]);
 
   const loadUserSettings = async () => {
     try {
+      console.log("Loading user settings for user:", session?.user.id);
       const { data, error } = await supabase
         .from('user_settings')
         .select('*')
         .eq('user_id', session?.user.id)
         .single();
         
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading user settings:', error);
+        // Don't throw error, just continue with defaults
+        return;
+      }
       
       if (data) {
+        console.log("User settings loaded:", data);
         setNotifications(data.enable_notifications);
         setDarkMode(data.theme === 'dark');
       }
     } catch (error) {
-      console.error('Error loading user settings:', error);
+      console.error('Exception in loadUserSettings:', error);
+      setPageError("Failed to load user settings. Please try refreshing the page.");
     }
   };
   
   const loadConnections = async () => {
     try {
+      console.log("Loading platform connections for user:", session?.user.id);
       const { data, error } = await supabase
         .from('platform_connections')
         .select('platform, connected, username')
         .eq('user_id', session?.user.id);
         
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading connections:', error);
+        // Don't throw, continue with defaults
+        return;
+      }
       
       if (data && data.length > 0) {
+        console.log("Platform connections loaded:", data);
         setConnections(data);
       } else {
+        console.log("No platform connections found, using defaults");
         setConnections([
           { platform: 'twitter', connected: false },
           { platform: 'instagram', connected: false }
         ]);
       }
     } catch (error) {
-      console.error('Error loading connections:', error);
+      console.error('Exception in loadConnections:', error);
+      setPageError("Failed to load social connections. Please try refreshing the page.");
     }
   };
   
@@ -113,12 +134,17 @@ const Settings = () => {
       const twitterService = new TwitterApiService(session.user.id);
       
       const authURL = await twitterService.initiateAuth();
+      console.log('Generated Twitter auth URL:', authURL);
+      
+      if (!authURL) {
+        throw new Error('Failed to generate Twitter authentication URL');
+      }
       
       window.location.href = authURL;
       toast.info('Redirecting to Twitter for authentication...');
     } catch (error) {
       console.error('Error connecting Twitter:', error);
-      toast.error('Failed to connect Twitter');
+      toast.error('Failed to connect Twitter: ' + (error instanceof Error ? error.message : 'Unknown error'));
       setLoading(false);
     }
   };
@@ -193,6 +219,46 @@ const Settings = () => {
 
   const ACCESS_TOKEN_PLACEHOLDER = "placeholder_access_token";
   const ACCESS_TOKEN_SECRET_PLACEHOLDER = "placeholder_access_token_secret";
+
+  if (authLoading) {
+    return (
+      <div className="container mx-auto py-6 flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+  
+  if (!session?.user && !authLoading) {
+    return (
+      <div className="container mx-auto py-6 space-y-8">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <p className="text-lg text-center mb-4">You need to be logged in to access settings.</p>
+            <Button onClick={() => navigate('/auth')}>Go to Login</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+  
+  if (pageError) {
+    return (
+      <div className="container mx-auto py-6 space-y-8">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <p className="text-lg text-center text-destructive mb-4">{pageError}</p>
+            <Button onClick={() => window.location.reload()}>Refresh Page</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto py-6 space-y-8">
