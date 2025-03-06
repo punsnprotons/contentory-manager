@@ -363,6 +363,177 @@ export class TwitterApiService {
   }
 
   /**
+   * Calculate engagement metrics based on content performance
+   */
+  async calculateEngagementMetrics(): Promise<{
+    engagementRate: number;
+    totalEngagements: number;
+    totalPosts: number;
+    followerCount: number;
+  } | null> {
+    console.log(`TwitterApiService: calculateEngagementMetrics - isInitialized: ${this.isInitialized}`);
+    
+    if (!this.isInitialized) {
+      console.error("TwitterApiService: Cannot calculate metrics - service not initialized");
+      throw new Error('Twitter service not initialized');
+    }
+    
+    try {
+      console.log(`TwitterApiService: Calculating engagement metrics for user: ${this.userId}`);
+      
+      // Get latest content metrics for this user's Twitter content
+      const { data: metricsData, error: metricsError } = await supabase
+        .from('content')
+        .select(`
+          id,
+          content_metrics (
+            likes,
+            comments,
+            shares,
+            views
+          )
+        `)
+        .eq('user_id', this.userId)
+        .eq('platform', 'twitter')
+        .eq('status', 'published')
+        .order('published_at', { ascending: false })
+        .limit(50);
+        
+      if (metricsError) {
+        console.error("TwitterApiService: Error fetching content metrics:", metricsError);
+        throw metricsError;
+      }
+      
+      if (!metricsData || metricsData.length === 0) {
+        console.log("TwitterApiService: No content metrics found");
+        return null;
+      }
+      
+      console.log(`TwitterApiService: Found ${metricsData.length} posts with metrics`);
+      
+      // Calculate total engagement
+      let totalEngagements = 0;
+      let totalPosts = metricsData.length;
+      
+      let totalLikes = 0;
+      let totalComments = 0;
+      let totalShares = 0;
+      let totalViews = 0;
+      
+      for (const post of metricsData) {
+        // Each post can have multiple metrics entries, but we're only getting the latest
+        const metrics = Array.isArray(post.content_metrics) ? post.content_metrics[0] : post.content_metrics;
+        
+        if (metrics) {
+          totalLikes += metrics.likes || 0;
+          totalComments += metrics.comments || 0;
+          totalShares += metrics.shares || 0;
+          totalViews += metrics.views || 0;
+          
+          totalEngagements += (metrics.likes || 0) + (metrics.comments || 0) + (metrics.shares || 0);
+        }
+      }
+      
+      // Get follower count
+      const { data: followerData, error: followerError } = await supabase
+        .from('follower_metrics')
+        .select('follower_count')
+        .eq('user_id', this.userId)
+        .eq('platform', 'twitter')
+        .order('recorded_at', { ascending: false })
+        .limit(1)
+        .single();
+        
+      if (followerError && followerError.code !== 'PGRST116') {
+        console.error("TwitterApiService: Error fetching follower metrics:", followerError);
+        // Continue with a default value instead of throwing
+      }
+      
+      const followerCount = followerData?.follower_count || 1; // Prevent division by zero
+      console.log(`TwitterApiService: Using follower count of ${followerCount}`);
+      
+      // Calculate engagement rate (total engagements / (followers * posts))
+      const engagementRate = (totalEngagements / (followerCount * totalPosts)) * 100;
+      console.log(`TwitterApiService: Calculated engagement rate: ${engagementRate}%`);
+      
+      // Store engagement metrics
+      const { error: engagementInsertError } = await supabase
+        .from('engagement_metrics')
+        .insert({
+          user_id: this.userId,
+          platform: 'twitter',
+          engagement_rate: engagementRate,
+          // recorded_at and created_at will use defaults
+        });
+        
+      if (engagementInsertError) {
+        console.error("TwitterApiService: Error inserting engagement metrics:", engagementInsertError);
+        throw engagementInsertError;
+      }
+      
+      // Check if performance metrics record exists
+      const { data: performanceData, error: performanceError } = await supabase
+        .from('performance_metrics')
+        .select('id')
+        .eq('user_id', this.userId)
+        .eq('platform', 'twitter');
+        
+      if (performanceError) {
+        console.error("TwitterApiService: Error checking performance metrics:", performanceError);
+        throw performanceError;
+      }
+      
+      if (!performanceData || performanceData.length === 0) {
+        // Create new performance metrics record
+        console.log("TwitterApiService: Creating new performance metrics record");
+        const { error: insertError } = await supabase
+          .from('performance_metrics')
+          .insert({
+            user_id: this.userId,
+            platform: 'twitter',
+            total_likes: totalLikes,
+            total_comments: totalComments,
+            total_shares: totalShares,
+            total_views: totalViews
+          });
+          
+        if (insertError) {
+          console.error("TwitterApiService: Error inserting performance metrics:", insertError);
+          throw insertError;
+        }
+      } else {
+        // Update existing performance metrics record
+        console.log("TwitterApiService: Updating existing performance metrics record");
+        const { error: updateError } = await supabase
+          .from('performance_metrics')
+          .update({
+            total_likes: totalLikes,
+            total_comments: totalComments,
+            total_shares: totalShares,
+            total_views: totalViews
+          })
+          .eq('id', performanceData[0].id);
+          
+        if (updateError) {
+          console.error("TwitterApiService: Error updating performance metrics:", updateError);
+          throw updateError;
+        }
+      }
+      
+      console.log("TwitterApiService: Successfully calculated and stored engagement metrics");
+      return {
+        engagementRate,
+        totalEngagements,
+        totalPosts,
+        followerCount
+      };
+    } catch (error) {
+      console.error('TwitterApiService: Error calculating engagement metrics:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Manually trigger tweet fetching and import
    * This can be called from a settings page
    */
