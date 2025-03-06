@@ -39,3 +39,9 @@ export const isAuthenticated = async () => {
   const { data: { session } } = await supabase.auth.getSession();
   return !!session;
 };
+
+// Helper for getting the current session
+export const getCurrentSession = async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session;
+};
