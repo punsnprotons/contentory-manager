@@ -45,8 +45,13 @@ const Settings = () => {
       
       // Show success message
       toast.success("Successfully connected to Twitter!");
+      
+      // Force refresh of connections
+      if (session?.user) {
+        loadConnections();
+      }
     }
-  }, []);
+  }, [session]);
   
   useEffect(() => {
     if (session?.user) {
@@ -75,6 +80,26 @@ const Settings = () => {
       ]);
     }
   }, [session]);
+
+  // Setup message listener for Twitter auth on component mount
+  useEffect(() => {
+    const messageHandler = (event: MessageEvent) => {
+      console.log("Settings: Received message event:", event);
+      
+      if (event.data && event.data.type === 'TWITTER_AUTH_SUCCESS') {
+        console.log("Settings: Auth success message received, refreshing connections");
+        // Refresh connections to show updated status
+        loadConnections();
+      }
+    };
+    
+    window.addEventListener('message', messageHandler);
+    
+    // Clean up event listener on component unmount
+    return () => {
+      window.removeEventListener('message', messageHandler);
+    };
+  }, []);
 
   const loadUserSettings = async () => {
     try {
@@ -111,15 +136,27 @@ const Settings = () => {
   const loadConnections = async () => {
     try {
       console.log("Settings: Loading connections");
+      
+      if (!session?.user) {
+        console.log("Settings: No session available, can't load connections");
+        setConnections([
+          { platform: 'twitter', connected: false },
+          { platform: 'instagram', connected: false }
+        ]);
+        return;
+      }
+      
       const { data, error } = await supabase
         .from('platform_connections')
         .select('platform, connected, username')
-        .eq('user_id', session?.user.id);
+        .eq('user_id', session.user.id);
         
       if (error) {
         console.error('Error loading connections:', error);
         throw error;
       }
+      
+      console.log("Settings: Connections data from database:", data);
       
       if (data && data.length > 0) {
         console.log("Settings: Connections loaded", data);
@@ -203,20 +240,6 @@ const Settings = () => {
       }
       
       toast.info('Please complete authentication in the opened window');
-      
-      // Add event listener to handle postMessage from popup
-      const messageHandler = (event: MessageEvent) => {
-        console.log("Settings: Received message event:", event);
-        
-        if (event.data && event.data.type === 'TWITTER_AUTH_SUCCESS') {
-          console.log("Settings: Auth success message received, refreshing connections");
-          // Refresh connections to show updated status
-          loadConnections();
-          window.removeEventListener('message', messageHandler);
-        }
-      };
-      
-      window.addEventListener('message', messageHandler);
     } catch (error) {
       console.error('Error connecting Twitter:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to connect Twitter');

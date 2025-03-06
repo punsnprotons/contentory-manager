@@ -461,6 +461,24 @@ export class TwitterApiService {
       console.log("TwitterApiService: Received successful auth callback:", event.data);
       
       try {
+        // Get user profile data from Twitter API
+        let twitterUsername = 'twitter_user'; // Default value
+        
+        try {
+          // Try to get the actual username if possible
+          const profileResponse = await supabase.functions.invoke('twitter-integration', {
+            method: 'POST',
+            body: { endpoint: 'profile' }
+          });
+          
+          if (profileResponse.data && profileResponse.data.data && profileResponse.data.data.username) {
+            twitterUsername = profileResponse.data.data.username;
+            console.log("TwitterApiService: Retrieved Twitter username:", twitterUsername);
+          }
+        } catch (profileError) {
+          console.warn("TwitterApiService: Could not retrieve Twitter username, using default");
+        }
+        
         // Store the connection in the database
         const { error } = await supabase
           .from('platform_connections')
@@ -468,7 +486,7 @@ export class TwitterApiService {
             user_id: this.userId,
             platform: 'twitter',
             connected: true,
-            username: 'twitter_user', // This should be updated with the actual username
+            username: twitterUsername,
             access_token: event.data.data.token,
             refresh_token: event.data.data.verifier, // Store the verifier as refresh_token
             updated_at: new Date().toISOString()
@@ -479,9 +497,11 @@ export class TwitterApiService {
           toast.error("Failed to store Twitter connection");
         } else {
           console.log("TwitterApiService: Successfully stored Twitter connection");
-          toast.success("Successfully connected to Twitter");
           
           // Forward the auth success message back to the opener
+          window.opener?.postMessage({ type: "TWITTER_AUTH_SUCCESS", data: event.data.data }, "*");
+          
+          // Also post to current window in case opener doesn't exist
           window.postMessage({ type: "TWITTER_AUTH_SUCCESS", data: event.data.data }, "*");
           
           // Add a parameter to the URL to indicate we came from auth flow
