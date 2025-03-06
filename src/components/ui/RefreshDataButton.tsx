@@ -73,9 +73,45 @@ export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Pro
       };
     }
     
+    // Verify that data was actually updated in the database
+    const verifyDataUpdate = async () => {
+      try {
+        // Check for recent updates in follower_metrics
+        const nowTimestamp = new Date().toISOString();
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        
+        const { data: recentMetrics, error: metricsError } = await supabase
+          .from('follower_metrics')
+          .select('id, recorded_at')
+          .eq('user_id', userData.id)
+          .gte('created_at', fiveMinutesAgo)
+          .lte('created_at', nowTimestamp)
+          .order('created_at', { ascending: false })
+          .limit(1);
+          
+        if (metricsError) {
+          console.warn('Could not verify metrics update:', metricsError);
+        } else if (recentMetrics && recentMetrics.length > 0) {
+          console.log('Database update verified:', recentMetrics);
+          return true;
+        } else {
+          console.warn('No recent metrics found after refresh');
+        }
+        
+        return false;
+      } catch (err) {
+        console.error('Error verifying data update:', err);
+        return false;
+      }
+    };
+    
+    const dataVerified = await verifyDataUpdate();
+    
     return {
       success: true,
-      message: 'Twitter data refreshed successfully',
+      message: dataVerified 
+        ? 'Twitter data refreshed and database updated successfully' 
+        : 'Twitter data refreshed but database update could not be verified',
       data
     };
   } catch (error) {
