@@ -9,7 +9,14 @@ interface RefreshDataButtonProps {
   className?: string;
 }
 
-export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2) => {
+interface RefreshResponse {
+  success: boolean;
+  message: string;
+  data?: any;
+  error?: any;
+}
+
+export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Promise<RefreshResponse> => {
   try {
     // Get the current user
     const user = await getCurrentUser();
@@ -98,9 +105,13 @@ const RefreshDataButton: React.FC<RefreshDataButtonProps> = ({ className }) => {
         setIsRefreshing(false);
         return `${data.message}`;
       },
-      error: (err) => {
+      error: (err: Error | { message?: string } | unknown) => {
         setIsRefreshing(false);
-        const errorMessage = err.message || 'Unknown error';
+        // Handle different error types safely
+        const errorMessage = err instanceof Error ? err.message : 
+                             typeof err === 'object' && err !== null && 'message' in err ? 
+                             (err as { message: string }).message : 
+                             'Unknown error';
         console.error('Refresh error details:', err);
         return `Social media refresh failed: ${errorMessage}`;
       }
