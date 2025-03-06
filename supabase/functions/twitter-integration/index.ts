@@ -1,3 +1,4 @@
+
 import { createHmac } from "node:crypto";
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
@@ -411,8 +412,8 @@ serve(async (req) => {
       console.log("Handling Twitter callback");
       const result = await handleCallback(url);
       
-      // Get the application URL for redirect - updated to use the Lovable preview URL
-      const appUrl = "https://preview--contentory-manager.lovable.app/settings";
+      // Get the application URL for redirect - updated to use the production URL
+      const appUrl = "https://contentory-manager.lovable.app/settings";
       
       // Return HTML that will post a message to the opener window and then close itself
       return new Response(
