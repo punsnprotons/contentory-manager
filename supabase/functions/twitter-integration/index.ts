@@ -1,3 +1,4 @@
+
 import { createHmac } from "node:crypto";
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
@@ -7,10 +8,8 @@ const API_SECRET = Deno.env.get("TWITTER_API_SECRET")?.trim();
 const ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
 const ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")?.trim();
 
-// Get the Supabase project URL from environment variable
-const PROJECT_URL = Deno.env.get("SUPABASE_URL") || "https://fxzamjowvpnyuxthusib.supabase.co";
-// Construct the callback URL with the Supabase project URL
-const CALLBACK_URL = `${PROJECT_URL}/auth/v1/callback`;
+// Read CALLBACK_URL from environment variable or use a fallback with app URL
+const TWITTER_CALLBACK_URL = Deno.env.get("TWITTER_CALLBACK_URL") || "https://fxzamjowvpnyuxthusib.supabase.co/auth/v1/callback";
 
 // CORS headers for browser requests
 const corsHeaders = {
@@ -32,7 +31,7 @@ function validateEnvironmentVariables() {
   }
   
   console.log("All Twitter API credentials are present");
-  console.log("Using callback URL:", CALLBACK_URL);
+  console.log("Using callback URL:", TWITTER_CALLBACK_URL);
 }
 
 // Generate OAuth 1.0a signature
@@ -125,7 +124,7 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
   // Important: The callback URL must be included in the OAuth parameters
   // but not in the body of the request
   const oauthParams: Record<string, string> = {
-    oauth_callback: CALLBACK_URL
+    oauth_callback: encodeURIComponent(TWITTER_CALLBACK_URL)
   };
   
   // Generate authorization header
@@ -133,7 +132,7 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
   
   console.log("Requesting token with header:", authHeader);
   console.log("Request URL:", requestTokenURL);
-  console.log("Using callback URL:", CALLBACK_URL);
+  console.log("Using callback URL:", TWITTER_CALLBACK_URL);
   
   try {
     const response = await fetch(requestTokenURL, {
@@ -447,7 +446,15 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } else if (endpoint === 'auth' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'auth') {
-      // Initiate OAuth flow
+      // Initiate OAuth flow using the callbackUrl provided or the default
+      const callbackUrl = (body as any).callbackUrl || TWITTER_CALLBACK_URL;
+      console.log(`Using provided callback URL: ${callbackUrl}`);
+      
+      // Override the TWITTER_CALLBACK_URL for this request if a different one is provided
+      if (callbackUrl !== TWITTER_CALLBACK_URL) {
+        console.log(`Overriding default callback URL for this request`);
+      }
+      
       const result = await initiateOAuth();
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

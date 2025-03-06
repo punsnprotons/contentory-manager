@@ -410,19 +410,19 @@ export class TwitterApiService {
   /**
    * Initialize Twitter OAuth flow with the correct callback URL
    */
-  async initiateAuth(): Promise<string> {
+  async initiateAuth(callbackUrl?: string): Promise<string> {
     try {
       console.log("TwitterApiService: Initiating Twitter OAuth flow");
       
-      // Use the callback URL from the Supabase client
-      const callbackUrl = getCallbackUrl();
-      console.log(`TwitterApiService: Using callback URL: ${callbackUrl}`);
+      // Use the provided callback URL or fall back to the current page URL
+      const appCallbackUrl = callbackUrl || (typeof window !== 'undefined' ? window.location.href : getCallbackUrl());
+      console.log(`TwitterApiService: Using callback URL: ${appCallbackUrl}`);
       
       const response = await supabase.functions.invoke('twitter-integration', {
         method: 'POST',
         body: { 
           endpoint: 'auth',
-          callbackUrl
+          callbackUrl: appCallbackUrl
         }
       });
       

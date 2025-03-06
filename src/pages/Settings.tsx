@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -111,7 +112,14 @@ const Settings = () => {
     try {
       console.log('Initiating Twitter authentication...');
       const twitterService = new TwitterApiService(session.user.id);
-      const authURL = await twitterService.initiateAuth();
+      
+      // Get the application URL for the callback
+      const appUrl = window.location.origin;
+      const callbackUrl = `${appUrl}/settings`;
+      console.log(`Using application callback URL: ${callbackUrl}`);
+      
+      // Pass the callback URL to the Twitter service
+      const authURL = await twitterService.initiateAuth(callbackUrl);
       
       window.location.href = authURL;
       toast.info('Redirecting to Twitter for authentication...');
