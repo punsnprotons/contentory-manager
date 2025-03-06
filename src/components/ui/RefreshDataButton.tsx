@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
@@ -16,6 +17,8 @@ interface RefreshResponse {
   message: string;
   data?: any;
   error?: any;
+  details?: string;
+  instructions?: string;
 }
 
 export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Promise<RefreshResponse> => {
@@ -135,24 +138,49 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
       };
     }
     
-    const { data, error } = await supabase.functions.invoke('twitter-api', {
+    const { data, error } = await supabase.functions.invoke('twitter-integration', {
       method: 'POST',
       body: { 
-        content, 
-        mediaUrl 
+        endpoint: 'tweet',
+        text: content 
       },
       headers: {
-        Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-        path: '/tweet'
+        Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
       }
     });
     
     if (error) {
       console.error('Error publishing to Twitter:', error);
+      
+      // Check if the error contains a JSON response with detailed information
+      let errorDetails = "Unable to post to Twitter";
+      let instructions = "";
+      
+      try {
+        // The error might contain a JSON string with more details
+        if (typeof error.message === 'string' && error.message.includes('{')) {
+          const jsonStart = error.message.indexOf('{');
+          const jsonString = error.message.substring(jsonStart);
+          const parsedError = JSON.parse(jsonString);
+          
+          if (parsedError.details) {
+            errorDetails = parsedError.details;
+          }
+          
+          if (parsedError.instructions) {
+            instructions = parsedError.instructions;
+          }
+        }
+      } catch (parseError) {
+        console.warn('Could not parse error message as JSON:', parseError);
+      }
+      
       return {
         success: false,
         message: 'Failed to publish to Twitter',
-        error
+        error,
+        details: errorDetails,
+        instructions
       };
     }
     
@@ -163,6 +191,7 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
     };
   } catch (error) {
     console.error('Unexpected error during Twitter publish:', error);
+    
     return {
       success: false,
       message: 'An unexpected error occurred while publishing to Twitter',

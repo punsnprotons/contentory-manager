@@ -1,3 +1,4 @@
+
 import { createHmac } from "node:crypto";
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
@@ -265,6 +266,17 @@ async function sendTweet(tweetText: string): Promise<any> {
     console.log("Response Body:", responseText);
 
     if (!response.ok) {
+      // Specific handling for 403 Forbidden errors
+      if (response.status === 403) {
+        const errorDetail = {
+          status: response.status,
+          statusText: response.statusText,
+          body: responseText,
+          solution: "This is likely a permissions issue. Make sure your Twitter Developer App has WRITE permissions enabled. Go to the Twitter Developer Portal, find your app, go to 'User authentication settings' and ensure 'Read and write' permissions are selected."
+        };
+        throw new Error(`Forbidden: You don't have permission to post tweets. ${JSON.stringify(errorDetail)}`);
+      }
+      
       throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
     }
 
@@ -462,13 +474,30 @@ serve(async (req) => {
         });
       }
       
-      const randomSuffix = Math.random().toString(36).substring(2, 6);
-      const uniqueTweetText = `${tweetText} #${randomSuffix}`;
-      
-      const tweet = await sendTweet(uniqueTweetText);
-      return new Response(JSON.stringify(tweet), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      try {
+        const randomSuffix = Math.random().toString(36).substring(2, 6);
+        const uniqueTweetText = `${tweetText} #${randomSuffix}`;
+        
+        const tweet = await sendTweet(uniqueTweetText);
+        return new Response(JSON.stringify(tweet), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (error) {
+        console.error("Tweet error details:", error);
+        
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        // Return a more detailed error response
+        return new Response(JSON.stringify({ 
+          error: "Failed to post tweet", 
+          details: errorMessage,
+          instructions: error instanceof Error && error.message.includes("Forbidden") ? 
+            "Please update your Twitter Developer App to have 'Read and write' permissions in the 'User authentication settings' section of the Twitter Developer Portal." : 
+            "Please check your Twitter API credentials"
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     } else if (endpoint === 'user' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'user') {
       const user = await getUser();
       return new Response(JSON.stringify(user), {
