@@ -119,8 +119,8 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
   const requestTokenURL = 'https://api.twitter.com/oauth/request_token';
   const method = 'POST';
   
-  // Important: The callback URL should NOT be URL-encoded in the oauthParams
-  // Twitter's OAuth implementation expects oauth_callback to be properly encoded during signature generation
+  // Important: The callback URL must be included in the OAuth parameters
+  // but not in the body of the request
   const oauthParams: Record<string, string> = {
     oauth_callback: CALLBACK_URL
   };
@@ -176,8 +176,8 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
 async function generateTwitterAuthURL(): Promise<string> {
   try {
     const { oauth_token } = await getRequestToken();
-    // Updated to use the proper authentication URL
-    // This is the correct authentication URL that should work
+    
+    // Using the authorize endpoint which requires explicit user approval each time
     const authURL = `https://api.twitter.com/oauth/authorize?oauth_token=${oauth_token}`;
     console.log("Generated Auth URL:", authURL);
     return authURL;
@@ -187,7 +187,7 @@ async function generateTwitterAuthURL(): Promise<string> {
   }
 }
 
-// Twitter API v2 base URL - updated to use api.twitter.com which still works for many endpoints
+// Twitter API v2 base URL
 const BASE_URL = "https://api.twitter.com/2";
 
 // Get current user profile
@@ -198,23 +198,28 @@ async function getUser() {
   
   console.log("Getting Twitter user profile");
   
-  const response = await fetch(url, {
-    method: method,
-    headers: {
-      Authorization: authHeader,
-      "Content-Type": "application/json",
-    },
-  });
-  
-  const responseText = await response.text();
-  console.log("Response Status:", response.status);
-  console.log("Response Body:", responseText);
-  
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
+  try {
+    const response = await fetch(url, {
+      method: method,
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+      },
+    });
+    
+    const responseText = await response.text();
+    console.log("Response Status:", response.status);
+    console.log("Response Body:", responseText);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
+    }
+    
+    return JSON.parse(responseText);
+  } catch (error) {
+    console.error("Error fetching user:", error);
+    throw error;
   }
-  
-  return JSON.parse(responseText);
 }
 
 // Send a tweet
@@ -227,24 +232,29 @@ async function sendTweet(tweetText: string): Promise<any> {
   
   console.log("Sending tweet:", tweetText);
   
-  const response = await fetch(url, {
-    method: method,
-    headers: {
-      Authorization: authHeader,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(requestBody),
-  });
+  try {
+    const response = await fetch(url, {
+      method: method,
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+    });
 
-  const responseText = await response.text();
-  console.log("Response Status:", response.status);
-  console.log("Response Body:", responseText);
+    const responseText = await response.text();
+    console.log("Response Status:", response.status);
+    console.log("Response Body:", responseText);
 
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
+    }
+
+    return JSON.parse(responseText);
+  } catch (error) {
+    console.error("Error sending tweet:", error);
+    throw error;
   }
-
-  return JSON.parse(responseText);
 }
 
 // Get user profile details with profile image and follower metrics
@@ -257,23 +267,28 @@ async function getUserProfile() {
   
   console.log("Getting Twitter user profile with expanded fields");
   
-  const response = await fetch(url, {
-    method: method,
-    headers: {
-      Authorization: authHeader,
-      "Content-Type": "application/json",
-    },
-  });
-  
-  const responseText = await response.text();
-  console.log("Response Status:", response.status);
-  console.log("Response Body:", responseText);
-  
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
+  try {
+    const response = await fetch(url, {
+      method: method,
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+      },
+    });
+    
+    const responseText = await response.text();
+    console.log("Response Status:", response.status);
+    console.log("Response Body:", responseText);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
+    }
+    
+    return JSON.parse(responseText);
+  } catch (error) {
+    console.error("Error fetching profile:", error);
+    throw error;
   }
-  
-  return JSON.parse(responseText);
 }
 
 // Verify Twitter credentials
