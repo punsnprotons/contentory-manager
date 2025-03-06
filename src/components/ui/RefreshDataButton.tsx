@@ -38,9 +38,13 @@ export const triggerTwitterRefresh = async () => {
       };
     }
     
-    // Call the Supabase edge function to refresh Twitter data
-    const { data, error } = await supabase.functions.invoke('twitter-refresh', {
-      body: { userId: userData.id }
+    // Call the new twitter-api edge function to refresh Twitter data
+    const { data, error } = await supabase.functions.invoke('twitter-api', {
+      method: 'GET',
+      headers: {
+        path: '/refresh',
+        Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+      }
     });
     
     if (error) {

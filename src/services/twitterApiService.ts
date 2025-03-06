@@ -978,7 +978,91 @@ export class TwitterApiService {
       throw error;
     }
   }
-  
+
+  /**
+   * Post a tweet
+   */
+  async postTweet(text: string, mediaUrl?: string): Promise<{ success: boolean; message: string; data?: any }> {
+    try {
+      console.log("TwitterApiService: Posting tweet with text:", text);
+      
+      if (!this.isInitialized) {
+        console.error("TwitterApiService: Cannot post tweet - service not initialized");
+        throw new Error('Twitter service not initialized');
+      }
+      
+      const { data, error } = await supabase.functions.invoke('twitter-api', {
+        method: 'POST',
+        body: { 
+          content: text,
+          mediaUrl
+        },
+        headers: {
+          path: '/tweet'
+        }
+      });
+      
+      if (error) {
+        console.error("TwitterApiService: Error posting tweet:", error);
+        throw error;
+      }
+      
+      console.log("TwitterApiService: Tweet posted successfully:", data);
+      
+      return {
+        success: true,
+        message: 'Tweet posted successfully',
+        data: data
+      };
+    } catch (error) {
+      console.error("TwitterApiService: Error in postTweet:", error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error posting tweet"
+      };
+    }
+  }
+
+  /**
+   * Refresh Twitter data
+   */
+  async refreshTwitterData(): Promise<{ success: boolean; message: string; data?: any }> {
+    try {
+      console.log("TwitterApiService: Refreshing Twitter data");
+      
+      if (!this.isInitialized) {
+        console.error("TwitterApiService: Cannot refresh data - service not initialized");
+        throw new Error('Twitter service not initialized');
+      }
+      
+      const { data, error } = await supabase.functions.invoke('twitter-api', {
+        method: 'GET',
+        headers: {
+          path: '/refresh'
+        }
+      });
+      
+      if (error) {
+        console.error("TwitterApiService: Error refreshing Twitter data:", error);
+        throw error;
+      }
+      
+      console.log("TwitterApiService: Twitter data refreshed successfully:", data);
+      
+      return {
+        success: true,
+        message: 'Twitter data refreshed successfully',
+        data: data
+      };
+    } catch (error) {
+      console.error("TwitterApiService: Error in refreshTwitterData:", error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error refreshing Twitter data"
+      };
+    }
+  }
+
   /**
    * Set up a message listener to handle the callback from Twitter
    */
@@ -993,7 +1077,7 @@ export class TwitterApiService {
     
     console.log("TwitterApiService: Auth message listener set up");
   }
-  
+
   /**
    * Handle the message sent from the popup window
    */
