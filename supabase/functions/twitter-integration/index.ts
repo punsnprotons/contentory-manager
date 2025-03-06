@@ -118,9 +118,10 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
   const requestTokenURL = 'https://api.twitter.com/oauth/request_token';
   const method = 'POST';
   
-  // Create OAuth parameters including callback
+  // Important: The callback URL should NOT be URL-encoded in the oauthParams
+  // Twitter's OAuth implementation expects oauth_callback to be properly encoded during signature generation
   const oauthParams: Record<string, string> = {
-    oauth_callback: encodeURIComponent(CALLBACK_URL)
+    oauth_callback: CALLBACK_URL
   };
   
   // Generate authorization header
