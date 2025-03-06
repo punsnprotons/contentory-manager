@@ -256,7 +256,7 @@ const Settings: React.FC = () => {
     try {
       const response = await supabase.functions.invoke('twitter-integration', {
         method: 'GET',
-        path: 'verify',
+        body: { endpoint: 'verify' }
       });
       
       const result = response.data as TwitterVerificationResult;
@@ -317,7 +317,6 @@ const Settings: React.FC = () => {
     try {
       const { data, error } = await supabase.functions.invoke('twitter-integration', {
         method: 'POST',
-        path: 'tweet',
         body: { text: "This is a test tweet from Wubble AI!" }
       });
       
