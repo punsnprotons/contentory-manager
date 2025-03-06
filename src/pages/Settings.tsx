@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { TwitterApiService } from '@/services/twitterApiService';
 import { toast } from 'sonner';
-import { PlusCircle, Twitter, Instagram, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { PlusCircle, Twitter, Instagram, CheckCircle, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 
 type SocialPlatform = 'twitter' | 'instagram';
 
@@ -17,6 +17,7 @@ interface Connection {
   platform: SocialPlatform;
   connected: boolean;
   username?: string;
+  profile_image?: string;
 }
 
 const Settings = () => {
@@ -27,6 +28,7 @@ const Settings = () => {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
   const { session } = useAuth();
   
   useEffect(() => {
@@ -263,6 +265,35 @@ const Settings = () => {
     }
   };
 
+  const fetchTwitterProfile = async () => {
+    if (!session?.user) {
+      toast.error('You must be logged in to fetch profile data');
+      return;
+    }
+    
+    setProfileLoading(true);
+    try {
+      console.log("Settings: Fetching Twitter profile data");
+      const twitterService = await TwitterApiService.create(session);
+      
+      if (!twitterService) {
+        throw new Error('Could not initialize Twitter service');
+      }
+      
+      const profileData = await twitterService.fetchProfileData();
+      
+      console.log("Settings: Profile data fetched", profileData);
+      toast.success('Successfully fetched and stored Twitter profile data');
+      
+      await loadConnections();
+    } catch (error) {
+      console.error('Error fetching Twitter profile:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to fetch profile data');
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
   if (pageLoading) {
     return (
       <div className="container mx-auto py-6 flex justify-center items-center min-h-[400px]">
@@ -353,7 +384,15 @@ const Settings = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                       {connection.platform === 'twitter' ? (
-                        <Twitter className="h-8 w-8 text-blue-400" />
+                        connection.profile_image ? (
+                          <img 
+                            src={connection.profile_image} 
+                            alt="Twitter profile" 
+                            className="h-10 w-10 rounded-full" 
+                          />
+                        ) : (
+                          <Twitter className="h-8 w-8 text-blue-400" />
+                        )
                       ) : (
                         <Instagram className="h-8 w-8 text-pink-500" />
                       )}
@@ -370,6 +409,24 @@ const Settings = () => {
                     <div className="flex items-center space-x-2">
                       {connection.connected ? (
                         <>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={fetchTwitterProfile}
+                            disabled={profileLoading || connection.platform !== 'twitter'}
+                          >
+                            {profileLoading && connection.platform === 'twitter' ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Updating...
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                                Update Profile
+                              </>
+                            )}
+                          </Button>
                           <Button 
                             variant="outline" 
                             size="sm"
