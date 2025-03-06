@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 
@@ -266,18 +265,23 @@ export class TwitterApiService {
    */
   async initiateAuth(): Promise<string> {
     try {
+      console.log("TwitterApiService: Initiating Twitter OAuth flow");
       const response = await supabase.functions.invoke('twitter-integration', {
         method: 'POST',
         body: { endpoint: 'auth' }
       });
       
+      console.log("TwitterApiService: Auth response:", response);
+      
       if (response.error || !response.data?.success || !response.data?.authURL) {
+        console.error("TwitterApiService: Error initiating auth:", response.error || 'Failed to get auth URL');
         throw new Error(response.error?.message || 'Failed to initialize Twitter authentication');
       }
       
+      console.log("TwitterApiService: Successfully generated auth URL:", response.data.authURL);
       return response.data.authURL;
     } catch (error) {
-      console.error('Error initiating Twitter auth:', error);
+      console.error('TwitterApiService: Error initiating Twitter auth:', error);
       throw error;
     }
   }

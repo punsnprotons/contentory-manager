@@ -7,7 +7,7 @@ const API_KEY = Deno.env.get("TWITTER_API_KEY")?.trim();
 const API_SECRET = Deno.env.get("TWITTER_API_SECRET")?.trim();
 const ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
 const ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")?.trim();
-const CALLBACK_URL = Deno.env.get("TWITTER_CALLBACK_URL")?.trim() || "https://fxzamjowvpnyuxthusib.supabase.co/auth/v1/callback";
+const CALLBACK_URL = "https://fxzamjowvpnyuxthusib.supabase.co/auth/v1/callback";
 
 // CORS headers for browser requests
 const corsHeaders = {
@@ -119,9 +119,8 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
   const method = 'POST';
   
   // Create OAuth parameters including callback
-  const callbackURL = CALLBACK_URL;
   const oauthParams: Record<string, string> = {
-    oauth_callback: callbackURL
+    oauth_callback: encodeURIComponent(CALLBACK_URL)
   };
   
   // Generate authorization header
@@ -129,6 +128,7 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
   
   console.log("Requesting token with header:", authHeader);
   console.log("Request URL:", requestTokenURL);
+  console.log("Using callback URL:", CALLBACK_URL);
   
   try {
     const response = await fetch(requestTokenURL, {
