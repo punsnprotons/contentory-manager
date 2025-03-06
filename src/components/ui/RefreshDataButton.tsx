@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
@@ -45,14 +44,13 @@ export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Pro
       };
     }
     
-    // Call the twitter-api edge function to refresh Twitter data with improved timeout and retry options
-    const { data, error } = await supabase.functions.invoke('twitter-api', {
-      method: 'GET',
+    // Call the twitter-refresh edge function instead of twitter-api
+    const { data, error } = await supabase.functions.invoke('twitter-refresh', {
+      method: 'POST',
+      body: { userId: userData.id },
       headers: {
-        path: '/refresh',
         Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
-      },
-      body: { timeout: 60000 } // Extended timeout for slow connections
+      }
     });
     
     if (error) {
