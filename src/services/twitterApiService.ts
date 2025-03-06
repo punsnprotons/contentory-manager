@@ -2,6 +2,7 @@
 // Import necessary modules
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 export class TwitterApiService {
   userId: string;
@@ -38,13 +39,19 @@ export class TwitterApiService {
         headers: {
           'path': '/auth'
         },
-        body: {}
+        body: { timestamp: Date.now() } // Add timestamp to avoid caching
       });
       
       console.log('TwitterApiService: Auth response:', data);
       
       if (error) {
         console.error('TwitterApiService: Error initiating Twitter auth:', error);
+        
+        // Check for rate limiting
+        if (error.message && error.message.includes('429')) {
+          throw new Error('Twitter API rate limit exceeded. Please try again in a few minutes.');
+        }
+        
         throw new Error('Failed to initiate Twitter authentication');
       }
       
@@ -57,6 +64,9 @@ export class TwitterApiService {
       return data.authURL;
     } catch (error) {
       console.error('TwitterApiService: Error initiating Twitter auth:', error);
+      if (error instanceof Error) {
+        throw error;
+      }
       throw new Error('Failed to get auth URL');
     }
   }
@@ -73,10 +83,17 @@ export class TwitterApiService {
         headers: {
           'path': '/verify-credentials'
         },
-        body: {}
+        body: { timestamp: Date.now() } // Add timestamp to avoid caching
       });
       
       if (error) {
+        // Check for rate limiting
+        if (error.message && error.message.includes('429')) {
+          console.error('TwitterApiService: Rate limit exceeded:', error);
+          toast.error('Twitter API rate limit exceeded. Please try again in a few minutes.');
+          return false;
+        }
+        
         console.error('TwitterApiService: Error verifying credentials:', error);
         return false;
       }

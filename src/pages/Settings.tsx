@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -81,12 +80,9 @@ const Settings = () => {
       if (event.data && event.data.type === 'TWITTER_AUTH_SUCCESS') {
         console.log("Settings: Auth success message received, refreshing connections");
         
-        // Process the success message from the popup window
         if (event.data.data && event.data.data.success && session?.user) {
-          // Create a TwitterApiService instance
           const twitterService = new TwitterApiService(session.user.id);
           
-          // Fetch profile data to get username and store the connection
           twitterService.fetchProfileData()
             .then(() => {
               toast.success("Successfully connected to Twitter!");
@@ -229,6 +225,8 @@ const Settings = () => {
     try {
       console.log("Settings: Connecting Twitter");
       const twitterService = new TwitterApiService(session.user.id);
+      toast.info('Setting up Twitter authentication...');
+      
       const authURL = await twitterService.initiateAuth();
       
       console.log("Settings: Opening Twitter auth URL:", authURL);
@@ -242,7 +240,13 @@ const Settings = () => {
       toast.info('Please complete authentication in the opened window');
     } catch (error) {
       console.error('Error connecting Twitter:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to connect Twitter');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to connect Twitter';
+      
+      if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+        toast.error('Twitter API rate limit exceeded. Please wait a few minutes before trying again.');
+      } else {
+        toast.error(errorMessage);
+      }
     } finally {
       setLoading(false);
     }

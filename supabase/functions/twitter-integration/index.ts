@@ -1,4 +1,3 @@
-
 import { createHmac } from "node:crypto";
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
@@ -15,6 +14,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Rate limiting helpers 
+let lastRequestTime = 0;
+const REQUEST_RATE_LIMIT_MS = 15000; // 15 seconds between requests
+
+function checkRateLimit(): boolean {
+  const now = Date.now();
+  if (now - lastRequestTime < REQUEST_RATE_LIMIT_MS) {
+    return false; // Rate limited
+  }
+  lastRequestTime = now;
+  return true; // Not rate limited
+}
+
 // Validate environment variables
 function validateEnvironmentVariables() {
   const missingVars = [];
@@ -30,12 +42,6 @@ function validateEnvironmentVariables() {
   
   console.log("[TWITTER-INTEGRATION] All Twitter API credentials are present");
   console.log("[TWITTER-INTEGRATION] Using callback URL:", CALLBACK_URL);
-  console.log("[TWITTER-INTEGRATION] API_KEY length:", API_KEY?.length);
-  console.log("[TWITTER-INTEGRATION] API_SECRET length:", API_SECRET?.length);
-  console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN length:", ACCESS_TOKEN?.length);
-  console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN_SECRET length:", ACCESS_TOKEN_SECRET?.length);
-  console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN first 5 chars:", ACCESS_TOKEN?.substring(0, 5));
-  console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN_SECRET first 5 chars:", ACCESS_TOKEN_SECRET?.substring(0, 5));
 }
 
 // Generate OAuth 1.0a signature
@@ -134,6 +140,12 @@ const BASE_URL = "https://api.twitter.com/2";
 
 // Get current user profile
 async function getUser() {
+  // Check rate limit
+  if (!checkRateLimit()) {
+    console.log("[TWITTER-INTEGRATION] Rate limit hit, delaying request");
+    throw new Error("Rate limit exceeded. Please try again in a few seconds.");
+  }
+  
   const url = `${BASE_URL}/users/me`;
   const method = "GET";
   const authHeader = generateOAuthHeader(method, url, {}, ACCESS_TOKEN, ACCESS_TOKEN_SECRET);
@@ -152,6 +164,11 @@ async function getUser() {
     const responseText = await response.text();
     console.log("[TWITTER-INTEGRATION] Response Status:", response.status);
     console.log("[TWITTER-INTEGRATION] Response Body:", responseText);
+    
+    if (response.status === 429) {
+      console.error("[TWITTER-INTEGRATION] Rate limit exceeded");
+      throw new Error("Twitter API rate limit exceeded. Please try again in a few minutes.");
+    }
     
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
@@ -341,6 +358,15 @@ async function handleTwitterAuth(): Promise<{ success: boolean; authURL?: string
   try {
     console.log("[TWITTER-INTEGRATION] Handling Twitter auth initialization");
     
+    // Check rate limit before making API calls
+    if (!checkRateLimit()) {
+      console.log("[TWITTER-INTEGRATION] Rate limit hit, returning error");
+      return {
+        success: false,
+        error: "Too many requests. Please try again after a few minutes."
+      };
+    }
+    
     // For simplicity, we'll use a direct auth approach with the existing credentials
     // Instead of a complex OAuth flow, we'll verify our credentials and just return success
     // This will allow users to post tweets using the app's credentials
@@ -359,6 +385,16 @@ async function handleTwitterAuth(): Promise<{ success: boolean; authURL?: string
       };
     } catch (error) {
       console.error("[TWITTER-INTEGRATION] Error verifying credentials during auth:", error);
+      
+      // Check if this is a rate limit issue
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      if (errorMessage.includes("rate limit") || errorMessage.includes("429")) {
+        return {
+          success: false,
+          error: "Twitter API rate limit exceeded. Please try again in a few minutes."
+        };
+      }
+      
       return {
         success: false,
         error: "Failed to verify Twitter credentials. Please check your API keys and tokens."
@@ -457,9 +493,22 @@ serve(async (req) => {
     // Handle auth endpoint
     if (endpoint === 'auth' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'auth') {
       console.log("[TWITTER-INTEGRATION] Handling auth request");
+      
+      // Check rate limit
+      if (!checkRateLimit()) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: "Too many requests. Please try again after a few minutes."
+        }), {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      
       const result = await handleTwitterAuth();
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: result.success ? 200 : result.error?.includes("rate limit") ? 429 : 400
       });
     }
     

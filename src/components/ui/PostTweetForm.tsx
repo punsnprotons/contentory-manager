@@ -1,12 +1,11 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Send, Image } from 'lucide-react';
-import { toast } from 'sonner';
-import { getTwitterApiService } from '@/services/twitterApiService';
-import { getCurrentSession } from '@/integrations/supabase/client';
+import { Send, Loader2 } from 'lucide-react';
+import { publishToTwitter } from '@/components/ui/RefreshDataButton';
+import { TwitterApiService } from '@/services/twitterApiService';
+import { useAuth } from '@/hooks/useAuth';
 
 interface PostTweetFormProps {
   onSuccess?: () => void;
@@ -15,99 +14,77 @@ interface PostTweetFormProps {
 
 const PostTweetForm: React.FC<PostTweetFormProps> = ({ onSuccess, className }) => {
   const [content, setContent] = useState('');
-  const [isPosting, setIsPosting] = useState(false);
-  
-  // Track the character count (Twitter has a 280 character limit)
-  const charCount = content.length;
-  const maxChars = 280;
-  
+  const [isLoading, setIsLoading] = useState(false);
+  const { session } = useAuth();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!content.trim()) {
-      toast.error('Please enter some content for your tweet');
+      toast.error('Tweet content cannot be empty.');
       return;
     }
-    
-    if (charCount > maxChars) {
-      toast.error(`Tweet is too long. Please reduce to ${maxChars} characters.`);
-      return;
-    }
-    
-    setIsPosting(true);
-    
+
+    setIsLoading(true);
     try {
-      // Get the Twitter API service
-      const session = await getCurrentSession();
-      const twitterService = await getTwitterApiService(session);
-      
-      if (!twitterService) {
-        throw new Error('Failed to initialize Twitter service');
+      if (!session?.user) {
+        toast.error('You must be logged in to post a tweet.');
+        return;
       }
-      
-      // Post the tweet
-      const result = await twitterService.postTweet(content);
-      
-      if (!result.success) {
-        throw new Error(result.message);
-      }
-      
-      toast.success('Tweet posted successfully!');
-      setContent('');
-      
-      if (onSuccess) {
-        onSuccess();
+
+      const result = await publishToTwitter(content);
+
+      if (result.success) {
+        toast.success(result.message || 'Successfully posted to Twitter!');
+        setContent('');
+        if (onSuccess) {
+          onSuccess();
+        }
+      } else {
+        toast.error(result.message || 'Failed to post to Twitter.');
       }
     } catch (error) {
       console.error('Error posting tweet:', error);
-      toast.error(`Failed to post tweet: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast.error('Failed to post to Twitter. Please try again.');
     } finally {
-      setIsPosting(false);
+      setIsLoading(false);
     }
   };
-  
+
   return (
     <Card className={className}>
       <CardHeader>
-        <CardTitle>Post a Tweet</CardTitle>
+        <CardTitle>Post to Twitter</CardTitle>
       </CardHeader>
-      <form onSubmit={handleSubmit}>
-        <CardContent>
-          <Textarea
-            placeholder="What's happening?"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            className="resize-none min-h-[100px]"
-          />
-          <div className="flex justify-between items-center mt-2 text-sm text-muted-foreground">
-            <div>{charCount}/{maxChars}</div>
-            {charCount > maxChars && (
-              <div className="text-destructive font-medium">
-                {charCount - maxChars} characters over limit
-              </div>
-            )}
+      <CardContent>
+        <form onSubmit={handleSubmit}>
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Textarea
+                placeholder="What's on your mind?"
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                rows={3}
+                disabled={isLoading}
+              />
+            </div>
           </div>
-        </CardContent>
-        <CardFooter className="flex justify-between">
-          <Button 
-            type="button" 
-            variant="outline" 
-            size="sm"
-            disabled={isPosting}
-          >
-            <Image className="h-4 w-4 mr-2" />
-            Add Image
-          </Button>
-          <Button 
-            type="submit" 
-            size="sm"
-            disabled={isPosting || !content.trim() || charCount > maxChars}
-          >
-            {isPosting ? 'Posting...' : 'Post Tweet'}
-            <Send className="h-4 w-4 ml-2" />
-          </Button>
-        </CardFooter>
-      </form>
+        </form>
+      </CardContent>
+      <CardFooter className="justify-between">
+        <Button type="submit" onClick={handleSubmit} disabled={isLoading}>
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Posting...
+            </>
+          ) : (
+            <>
+              Post <Send className="ml-2 h-4 w-4" />
+            </>
+          )}
+        </Button>
+      </CardFooter>
     </Card>
   );
 };
