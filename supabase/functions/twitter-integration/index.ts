@@ -7,7 +7,7 @@ const API_KEY = Deno.env.get("TWITTER_API_KEY")?.trim();
 const API_SECRET = Deno.env.get("TWITTER_API_SECRET")?.trim();
 const ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
 const ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")?.trim();
-const CALLBACK_URL = "https://fxzamjowvpnyuxthusib.supabase.co/functions/v1/twitter-integration/callback";
+const CALLBACK_URL = "https://fxzamjowvpnyuxthusib.supabase.co/auth/v1/callback";
 
 // CORS headers for browser requests
 const corsHeaders = {
@@ -412,7 +412,7 @@ serve(async (req) => {
       console.log("Handling Twitter callback");
       const result = await handleCallback(url);
       
-      // Specify the application URL for redirect - this should be your settings page
+      // Get the application URL for redirect
       const appUrl = "https://fxzamjowvpnyuxthusib.supabase.co/settings";
       
       // Return HTML that will post a message to the opener window and then close itself
