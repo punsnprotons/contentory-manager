@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, getCallbackUrl } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 import { ContentType } from "@/types";
 import { toast } from "sonner";
@@ -408,14 +408,22 @@ export class TwitterApiService {
   }
 
   /**
-   * Initialize Twitter OAuth flow
+   * Initialize Twitter OAuth flow with the correct callback URL
    */
   async initiateAuth(): Promise<string> {
     try {
       console.log("TwitterApiService: Initiating Twitter OAuth flow");
+      
+      // Use the callback URL from the Supabase client
+      const callbackUrl = getCallbackUrl();
+      console.log(`TwitterApiService: Using callback URL: ${callbackUrl}`);
+      
       const response = await supabase.functions.invoke('twitter-integration', {
         method: 'POST',
-        body: { endpoint: 'auth' }
+        body: { 
+          endpoint: 'auth',
+          callbackUrl
+        }
       });
       
       console.log("TwitterApiService: Auth response:", response);
@@ -429,6 +437,40 @@ export class TwitterApiService {
       return response.data.authURL;
     } catch (error) {
       console.error('TwitterApiService: Error initiating Twitter auth:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Process Twitter OAuth callback
+   * This should be called after the user completes the Twitter OAuth flow
+   */
+  async processOAuthCallback(oauthToken: string, oauthVerifier: string): Promise<boolean> {
+    try {
+      console.log(`TwitterApiService: Processing OAuth callback with token: ${oauthToken}`);
+      
+      // In a full implementation, we would exchange the oauth_token and oauth_verifier for access tokens
+      // However, we're using preset access tokens in our edge function for simplicity
+      
+      // Store the connection in the database
+      const { error } = await supabase.from('platform_connections').upsert({
+        user_id: this.userId,
+        platform: "twitter" as "twitter" | "instagram",
+        username: 'twitter_user', // This would come from the API in a real implementation
+        connected: true,
+        updated_at: new Date().toISOString()
+      });
+      
+      if (error) {
+        console.error('TwitterApiService: Error storing Twitter connection:', error);
+        throw error;
+      }
+      
+      this.isInitialized = true;
+      console.log('TwitterApiService: Successfully processed OAuth callback');
+      return true;
+    } catch (error) {
+      console.error('TwitterApiService: Error processing OAuth callback:', error);
       throw error;
     }
   }

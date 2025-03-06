@@ -1,3 +1,4 @@
+
 import { createHmac } from "node:crypto";
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
@@ -6,7 +7,10 @@ const API_KEY = Deno.env.get("TWITTER_API_KEY")?.trim();
 const API_SECRET = Deno.env.get("TWITTER_API_SECRET")?.trim();
 const ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
 const ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")?.trim();
-const CALLBACK_URL = "https://fxzamjowvpnyuxthusib.supabase.co/auth/v1/callback";
+
+// Use the Supabase project URL for the callback instead of localhost
+const PROJECT_URL = Deno.env.get("SUPABASE_URL") || "https://fxzamjowvpnyuxthusib.supabase.co";
+const CALLBACK_URL = `${PROJECT_URL}/auth/v1/callback`;
 
 // CORS headers for browser requests
 const corsHeaders = {

@@ -39,3 +39,31 @@ export const isAuthenticated = async () => {
   const { data: { session } } = await supabase.auth.getSession();
   return !!session;
 };
+
+// Helper to get the appropriate callback URL based on environment
+export const getCallbackUrl = () => {
+  // Use the Supabase project URL for the callback
+  return `${SUPABASE_URL}/auth/v1/callback`;
+};
+
+// Helper to store OAuth tokens in the platform_connections table
+export const storeOAuthTokens = async (
+  userId: string,
+  platform: "twitter" | "instagram", 
+  accessToken: string, 
+  refreshToken: string,
+  username: string
+) => {
+  // Store the tokens in the platform_connections table
+  return await supabase
+    .from('platform_connections')
+    .upsert({
+      user_id: userId,
+      platform,
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      username,
+      connected: true,
+      updated_at: new Date().toISOString()
+    });
+};
