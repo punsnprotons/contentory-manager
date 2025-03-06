@@ -95,45 +95,91 @@ function generateOAuthHeader(method: string, url: string): string {
   );
 }
 
-// Generate Twitter OAuth authorization URL
-function generateTwitterAuthURL(): string {
-  const requestTokenURL = "https://api.twitter.com/oauth/request_token";
-  const method = "POST";
-  const oauthParams = {
-    oauth_callback: encodeURIComponent(CALLBACK_URL!),
+// Request a temporary token from Twitter
+async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_secret: string }> {
+  const requestTokenURL = 'https://api.twitter.com/oauth/request_token';
+  const method = 'POST';
+  
+  // Create OAuth parameters including the callback URL
+  const oauthParams: Record<string, string> = {
+    oauth_callback: encodeURIComponent(CALLBACK_URL),
     oauth_consumer_key: API_KEY!,
     oauth_nonce: Math.random().toString(36).substring(2),
-    oauth_signature_method: "HMAC-SHA1",
+    oauth_signature_method: 'HMAC-SHA1',
     oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
-    oauth_version: "1.0",
+    oauth_version: '1.0'
   };
 
+  // Generate signature for the request token
   const signature = generateOAuthSignature(
     method,
     requestTokenURL,
     oauthParams,
     API_SECRET!,
-    ''  // Empty token secret for request token
+    '' // Empty token secret for request token
   );
 
-  const signedOAuthParams = {
-    ...oauthParams,
-    oauth_signature: signature,
-  };
+  const oauthHeader = 'OAuth ' +
+    Object.entries({
+      ...oauthParams,
+      oauth_signature: signature
+    })
+    .map(([k, v]) => `${encodeURIComponent(k)}="${encodeURIComponent(v)}"`)
+    .join(', ');
 
-  const authHeader = "OAuth " + 
-    Object.entries(signedOAuthParams)
-      .map(([k, v]) => `${encodeURIComponent(k)}="${encodeURIComponent(v)}"`)
-      .join(", ");
+  console.log("OAuth Header for Request Token:", oauthHeader);
 
-  // This is just a placeholder - in a real implementation we would:
-  // 1. Make a POST request to requestTokenURL with authHeader
-  // 2. Get oauth_token from the response
-  // 3. Return "https://api.twitter.com/oauth/authenticate?oauth_token=ACTUAL_TOKEN"
-  
-  // For demo purposes, this returns directly to authentication URL with our token
-  console.log("Auth header for request token:", authHeader);
-  return `https://api.twitter.com/oauth/authenticate?oauth_token=${encodeURIComponent(ACCESS_TOKEN!)}`;
+  try {
+    const response = await fetch(requestTokenURL, {
+      method: method,
+      headers: {
+        'Authorization': oauthHeader,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Error getting request token: ${response.status} ${response.statusText}`);
+      console.error(`Response: ${errorText}`);
+      throw new Error(`Error getting request token: ${response.status} ${response.statusText}`);
+    }
+
+    const responseText = await response.text();
+    console.log("Request Token Response:", responseText);
+
+    // Parse response into key-value pairs
+    const parsedResponse: Record<string, string> = {};
+    responseText.split('&').forEach(pair => {
+      const [key, value] = pair.split('=');
+      parsedResponse[key] = value;
+    });
+
+    if (!parsedResponse.oauth_token || !parsedResponse.oauth_token_secret) {
+      throw new Error("Invalid response from Twitter: missing token or token secret");
+    }
+
+    return {
+      oauth_token: parsedResponse.oauth_token,
+      oauth_token_secret: parsedResponse.oauth_token_secret
+    };
+  } catch (error) {
+    console.error("Error requesting token:", error);
+    throw error;
+  }
+}
+
+// Generate Twitter OAuth authorization URL
+async function generateTwitterAuthURL(): Promise<string> {
+  try {
+    const { oauth_token } = await getRequestToken();
+    const authURL = `https://api.twitter.com/oauth/authenticate?oauth_token=${oauth_token}`;
+    console.log("Generated Auth URL:", authURL);
+    return authURL;
+  } catch (error) {
+    console.error("Error generating auth URL:", error);
+    throw error;
+  }
 }
 
 const BASE_URL = "https://api.twitter.com/2";
@@ -217,7 +263,7 @@ async function verifyCredentials(): Promise<any> {
 // Initiate OAuth authentication flow
 async function initiateOAuth(): Promise<any> {
   try {
-    const authURL = generateTwitterAuthURL();
+    const authURL = await generateTwitterAuthURL();
     return {
       success: true,
       authURL,
