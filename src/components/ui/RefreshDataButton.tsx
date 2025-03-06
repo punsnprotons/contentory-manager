@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
@@ -138,7 +139,45 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
     }
     
     console.log('Publishing content to Twitter:', content);
+    console.log('Using Twitter API endpoint for publishing');
     
+    // Add diagnostic logging for the session token
+    console.log('Session available:', !!session, 'Token length:', session.access_token.length);
+    
+    // First verify Twitter credentials before attempting to publish
+    try {
+      console.log('Verifying Twitter credentials before publishing...');
+      const verifyResponse = await supabase.functions.invoke('twitter-api', {
+        method: 'POST',
+        headers: {
+          path: '/verify-credentials',
+        }
+      });
+      
+      if (verifyResponse.error) {
+        console.error('Twitter credentials verification failed:', verifyResponse.error);
+        return {
+          success: false,
+          message: 'Twitter credentials verification failed',
+          error: verifyResponse.error.message || 'Unknown error during verification'
+        };
+      }
+      
+      console.log('Twitter credentials verification result:', verifyResponse.data);
+      if (!verifyResponse.data?.verified) {
+        return {
+          success: false,
+          message: 'Twitter credentials are invalid or insufficient permissions',
+          error: verifyResponse.data?.message || 'Verification failed'
+        };
+      }
+      
+      console.log('Twitter credentials verified successfully. Proceeding with tweet...');
+    } catch (verifyError) {
+      console.error('Error during Twitter credentials verification:', verifyError);
+    }
+    
+    // Now proceed with publishing the tweet
     const response = await supabase.functions.invoke('twitter-api', {
       method: 'POST',
       headers: {
@@ -151,48 +190,52 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
     });
     
     if (response.error) {
-      console.error('Twitter API error:', response.error);
+      console.error('Twitter API error details:', response.error);
       
-      if (response.error.message && typeof response.error.message === 'string') {
-        const errorMessage = response.error.message;
-        
-        if (errorMessage.includes('{') && errorMessage.includes('}')) {
-          try {
-            const jsonStart = errorMessage.indexOf('{');
-            const jsonEnd = errorMessage.lastIndexOf('}') + 1;
-            const jsonString = errorMessage.substring(jsonStart, jsonEnd);
-            const parsedError = JSON.parse(jsonString);
-            
-            return {
-              success: false,
-              message: parsedError.title || 'Twitter API error',
-              error: parsedError.detail || errorMessage,
-              instructions: parsedError.solution || parsedError.instructions || 
-                (parsedError.status === 403 ? 
-                  "After updating permissions in the Twitter Developer Portal to 'Read and write', you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings." : 
-                  undefined)
-            };
-          } catch (parseError) {
-            console.error('Error parsing JSON from error message:', parseError);
-          }
+      // Enhanced error parsing for better diagnostics
+      let errorMessage = response.error.message || 'Unknown error';
+      let instructions = undefined;
+      let detailedError = {};
+      
+      try {
+        if (typeof errorMessage === 'string' && errorMessage.includes('{')) {
+          // Try to extract JSON from error message
+          const jsonStart = errorMessage.indexOf('{');
+          const jsonEnd = errorMessage.lastIndexOf('}') + 1;
+          const jsonString = errorMessage.substring(jsonStart, jsonEnd);
+          detailedError = JSON.parse(jsonString);
+          console.log('Parsed error details:', detailedError);
         }
+      } catch (parseError) {
+        console.error('Error parsing error details:', parseError);
       }
       
-      if (response.error.message?.includes('403') || 
-          response.error.message?.includes('Forbidden') ||
-          response.error.message?.includes('permission')) {
+      // Check for specific error conditions
+      if (errorMessage.includes('403') || 
+          errorMessage.includes('Forbidden') ||
+          errorMessage.includes('permission')) {
         return {
           success: false,
           message: 'Twitter API Permission Error',
-          error: response.error.message,
+          error: errorMessage,
           instructions: "After updating permissions in the Twitter Developer Portal to 'Read and write', you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings."
+        };
+      }
+      
+      // Edge function error
+      if (errorMessage.includes('Edge Function returned a non-2xx status code')) {
+        return {
+          success: false,
+          message: 'Twitter Edge Function Error',
+          error: 'The Twitter integration function returned an error. Please check the edge function logs for details.',
+          instructions: "Review the edge function logs in your Supabase dashboard for detailed error information."
         };
       }
       
       return {
         success: false,
         message: 'Failed to publish to Twitter',
-        error: response.error.message || 'Unknown error'
+        error: errorMessage
       };
     }
     

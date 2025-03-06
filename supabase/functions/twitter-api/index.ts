@@ -27,6 +27,8 @@ serve(async (req) => {
       throw new Error('Missing path header');
     }
 
+    console.log(`[TWITTER-API] Processing request for path: ${path}`);
+
     // Create a Supabase client
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -40,8 +42,11 @@ serve(async (req) => {
     } = await supabaseClient.auth.getUser();
 
     if (!user) {
+      console.error('[TWITTER-API] User not found in auth token');
       throw new Error('User not found');
     }
+
+    console.log(`[TWITTER-API] User authenticated: ${user.id}`);
 
     // Find the user in the database
     const { data: userData, error: userError } = await supabaseClient
@@ -51,79 +56,121 @@ serve(async (req) => {
       .single();
 
     if (userError || !userData) {
-      console.error('Error finding user in database:', userError);
+      console.error('[TWITTER-API] Error finding user in database:', userError);
       throw new Error('User not found in database');
     }
 
-    console.log(`Publishing content with user: ${user.id}`);
+    console.log(`[TWITTER-API] Publishing content with user: ${user.id}`);
+
+    // Verify Twitter environment variables
+    if (path === '/verify-credentials') {
+      console.log('[TWITTER-API] Verifying Twitter credentials');
+      try {
+        const { data, error } = await supabaseClient.functions.invoke(
+          'twitter-integration',
+          {
+            method: 'POST',
+            body: { 
+              endpoint: 'verify'
+            }
+          }
+        );
+
+        if (error) {
+          console.error('[TWITTER-API] Error verifying Twitter credentials:', error);
+          throw new Error(`Failed to verify Twitter credentials: ${error.message}`);
+        }
+
+        console.log('[TWITTER-API] Twitter credentials verified:', data?.verified);
+        return new Response(JSON.stringify(data), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (error) {
+        console.error('[TWITTER-API] Unexpected error during verification:', error);
+        throw error;
+      }
+    }
 
     // Call the twitter-integration function based on the path
     if (path === '/tweet') {
       // For tweet endpoint, forward the request to the twitter-integration function
       const requestBody = await req.json();
       
-      // Forward the request to the twitter-integration function
-      const { data, error } = await supabaseClient.functions.invoke(
-        'twitter-integration',
-        {
-          method: 'POST',
-          body: { 
-            endpoint: 'tweet',
-            text: requestBody.content 
+      console.log('[TWITTER-API] Tweet content:', requestBody.content.substring(0, 50) + '...');
+      
+      try {
+        // Forward the request to the twitter-integration function
+        const { data, error } = await supabaseClient.functions.invoke(
+          'twitter-integration',
+          {
+            method: 'POST',
+            body: { 
+              endpoint: 'tweet',
+              text: requestBody.content 
+            }
           }
-        }
-      );
+        );
 
-      if (error) {
-        console.error('Error calling twitter-integration function:', error);
-        
-        // Check if error contains JSON with more details
-        try {
-          const errorResponse = {
-            success: false,
-            error: 'Failed to post tweet',
-            originalError: error.message
-          };
+        if (error) {
+          console.error('[TWITTER-API] Error calling twitter-integration function:', error);
           
-          if (typeof error.message === 'string') {
-            // First, try to extract the JSON part of the error message if present
-            if (error.message.includes('{')) {
-              try {
-                const jsonStart = error.message.indexOf('{');
-                const jsonEnd = error.message.lastIndexOf('}') + 1;
-                const jsonString = error.message.substring(jsonStart, jsonEnd);
-                const parsedError = JSON.parse(jsonString);
-                
-                errorResponse.details = parsedError.detail || parsedError.message || parsedError.body;
-                errorResponse.status = parsedError.status;
-                errorResponse.instructions = parsedError.solution || parsedError.instructions;
-              } catch (parseError) {
-                console.error('Error parsing JSON from error message:', parseError);
+          // Check if error contains JSON with more details
+          try {
+            const errorResponse = {
+              success: false,
+              error: 'Failed to post tweet',
+              originalError: error.message,
+              timestamp: new Date().toISOString()
+            };
+            
+            console.error('[TWITTER-API] Full error details:', errorResponse);
+            
+            if (typeof error.message === 'string') {
+              // First, try to extract the JSON part of the error message if present
+              if (error.message.includes('{')) {
+                try {
+                  const jsonStart = error.message.indexOf('{');
+                  const jsonEnd = error.message.lastIndexOf('}') + 1;
+                  const jsonString = error.message.substring(jsonStart, jsonEnd);
+                  const parsedError = JSON.parse(jsonString);
+                  
+                  console.error('[TWITTER-API] Parsed error details:', parsedError);
+                  
+                  errorResponse.details = parsedError.detail || parsedError.message || parsedError.body;
+                  errorResponse.status = parsedError.status;
+                  errorResponse.instructions = parsedError.solution || parsedError.instructions;
+                } catch (parseError) {
+                  console.error('[TWITTER-API] Error parsing JSON from error message:', parseError);
+                }
+              }
+              
+              // Check for 403 error to give specific remediation steps
+              if (error.message.includes('403') || error.message.includes('Forbidden')) {
+                errorResponse.error = 'Twitter API permission error';
+                errorResponse.remediation = 'After updating permissions in the Twitter Developer Portal to "Read and write", you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings.';
               }
             }
             
-            // Check for 403 error to give specific remediation steps
-            if (error.message.includes('403') || error.message.includes('Forbidden')) {
-              errorResponse.error = 'Twitter API permission error';
-              errorResponse.remediation = 'After updating permissions in the Twitter Developer Portal to "Read and write", you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings.';
-            }
+            return new Response(JSON.stringify(errorResponse), {
+              status: 403,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          } catch (parseError) {
+            console.error('[TWITTER-API] Error parsing error details:', parseError);
           }
           
-          return new Response(JSON.stringify(errorResponse), {
-            status: 403,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        } catch (parseError) {
-          console.error('Error parsing error details:', parseError);
+          throw new Error(`Failed to post tweet: ${error.message}`);
         }
-        
-        throw new Error(`Failed to post tweet: ${error.message}`);
-      }
 
-      // Return the response from the twitter-integration function
-      return new Response(JSON.stringify(data), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+        // Return the response from the twitter-integration function
+        console.log('[TWITTER-API] Tweet posted successfully');
+        return new Response(JSON.stringify(data), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (tweetError) {
+        console.error('[TWITTER-API] Unexpected error posting tweet:', tweetError);
+        throw tweetError;
+      }
     } else if (path === '/refresh') {
       // For refresh endpoint, call the twitter-refresh function
       const { data, error } = await supabaseClient.functions.invoke(
@@ -135,28 +182,8 @@ serve(async (req) => {
       );
 
       if (error) {
-        console.error('Error calling twitter-refresh function:', error);
+        console.error('[TWITTER-API] Error calling twitter-refresh function:', error);
         throw new Error(`Failed to refresh Twitter data: ${error.message}`);
-      }
-
-      return new Response(JSON.stringify(data), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    } else if (path === '/verify-credentials') {
-      // Add a new endpoint to verify Twitter credentials
-      const { data, error } = await supabaseClient.functions.invoke(
-        'twitter-integration',
-        {
-          method: 'POST',
-          body: { 
-            endpoint: 'verify'
-          }
-        }
-      );
-
-      if (error) {
-        console.error('Error verifying Twitter credentials:', error);
-        throw new Error(`Failed to verify Twitter credentials: ${error.message}`);
       }
 
       return new Response(JSON.stringify(data), {
@@ -166,7 +193,7 @@ serve(async (req) => {
       throw new Error(`Unknown path: ${path}`);
     }
   } catch (error) {
-    console.error('Error publishing to Twitter:', error);
+    console.error('[TWITTER-API] Error:', error);
     
     // Check for specific error messages that indicate permission issues
     let errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
@@ -185,7 +212,8 @@ serve(async (req) => {
         success: false,
         error: errorMessage,
         instructions,
-        status: statusCode
+        status: statusCode,
+        timestamp: new Date().toISOString()
       }),
       {
         status: statusCode,

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Sparkles, LayoutGrid, Image, Video, AlignLeft, Send, RotateCw, Save } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -118,6 +117,33 @@ const ContentGeneration: React.FC = () => {
       
       if (selectedPlatform === 'twitter') {
         toast.loading('Publishing to Twitter...');
+        
+        // Add diagnostics for Twitter tokens
+        console.log("Checking Twitter integration...");
+        
+        try {
+          // Verify credentials before attempting to publish
+          const verifyResponse = await supabase.functions.invoke('twitter-api', {
+            method: 'POST',
+            headers: {
+              path: '/verify-credentials',
+            }
+          });
+          
+          if (verifyResponse.error) {
+            console.error('Twitter credentials verification failed:', verifyResponse.error);
+            toast.dismiss();
+            toast.error('Twitter credential verification failed', {
+              description: verifyResponse.error.message || 'Could not verify Twitter credentials'
+            });
+            return;
+          }
+          
+          console.log('Twitter credentials verification result:', verifyResponse.data);
+        } catch (verifyError) {
+          console.error('Error during Twitter credentials verification:', verifyError);
+        }
+        
         const twitterResult = await publishToTwitter(generatedContent, mediaUrl);
         
         if (!twitterResult.success) {
@@ -133,6 +159,13 @@ const ContentGeneration: React.FC = () => {
               message: 'Your Twitter app does not have write permissions or your access tokens need to be regenerated.',
               instructions: twitterResult.instructions || 
                 'After updating permissions in the Twitter Developer Portal to "Read and write", you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings.'
+            });
+            setIsErrorDialogOpen(true);
+          } else if (twitterResult.error?.includes('Edge Function')) {
+            setErrorDetails({
+              title: 'Twitter Edge Function Error',
+              message: 'The Twitter integration function encountered an error.',
+              instructions: 'Please check the Supabase edge function logs for detailed error information. You may need to update environment variables or fix permission issues.'
             });
             setIsErrorDialogOpen(true);
           } else {

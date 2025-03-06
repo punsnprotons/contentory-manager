@@ -28,14 +28,14 @@ function validateEnvironmentVariables() {
     throw new Error(`Missing environment variables: ${missingVars.join(", ")}`);
   }
   
-  console.log("All Twitter API credentials are present");
-  console.log("Using callback URL:", CALLBACK_URL);
-  console.log("API_KEY length:", API_KEY?.length);
-  console.log("API_SECRET length:", API_SECRET?.length);
-  console.log("ACCESS_TOKEN length:", ACCESS_TOKEN?.length);
-  console.log("ACCESS_TOKEN_SECRET length:", ACCESS_TOKEN_SECRET?.length);
-  console.log("ACCESS_TOKEN first 5 chars:", ACCESS_TOKEN?.substring(0, 5));
-  console.log("ACCESS_TOKEN_SECRET first 5 chars:", ACCESS_TOKEN_SECRET?.substring(0, 5));
+  console.log("[TWITTER-INTEGRATION] All Twitter API credentials are present");
+  console.log("[TWITTER-INTEGRATION] Using callback URL:", CALLBACK_URL);
+  console.log("[TWITTER-INTEGRATION] API_KEY length:", API_KEY?.length);
+  console.log("[TWITTER-INTEGRATION] API_SECRET length:", API_SECRET?.length);
+  console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN length:", ACCESS_TOKEN?.length);
+  console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN_SECRET length:", ACCESS_TOKEN_SECRET?.length);
+  console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN first 5 chars:", ACCESS_TOKEN?.substring(0, 5));
+  console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN_SECRET first 5 chars:", ACCESS_TOKEN_SECRET?.substring(0, 5));
 }
 
 // Generate OAuth 1.0a signature
@@ -66,10 +66,10 @@ function generateOAuthSignature(
   const hmac = createHmac('sha1', signingKey);
   const signature = hmac.update(signatureBaseString).digest('base64');
   
-  console.log("Parameter String:", parameterString);
-  console.log("Signature Base String:", signatureBaseString);
-  console.log("Signing Key pattern:", signingKey.replace(/./g, '*') + " (redacted for security)");
-  console.log("Generated Signature:", signature);
+  console.log("[TWITTER-INTEGRATION] Parameter String:", parameterString);
+  console.log("[TWITTER-INTEGRATION] Signature Base String:", signatureBaseString);
+  console.log("[TWITTER-INTEGRATION] Signing Key pattern:", signingKey.replace(/./g, '*') + " (redacted for security)");
+  console.log("[TWITTER-INTEGRATION] Generated Signature:", signature);
   
   return signature;
 }
@@ -109,107 +109,14 @@ function generateOAuthHeader(
   // Add signature to OAuth parameters
   oauthParams.oauth_signature = signature;
   
-  // Build authorization header string - using key in map function instead of hardcoded 'k'
+  // Build authorization header string
   const authHeader = 'OAuth ' + Object.keys(oauthParams)
     .sort()
     .map(key => `${encodeURIComponent(key)}="${encodeURIComponent(oauthParams[key])}"`)
     .join(', ');
     
-  console.log("Full OAuth Header pattern:", authHeader.substring(0, 20) + "... (abbreviated for security)");
+  console.log("[TWITTER-INTEGRATION] Full OAuth Header pattern:", authHeader.substring(0, 20) + "... (abbreviated for security)");
   return authHeader;
-}
-
-// Request a temporary token from Twitter
-async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_secret: string, oauth_callback_confirmed: string }> {
-  // Use the v1.1 OAuth endpoints which are still operational
-  const requestTokenURL = 'https://api.twitter.com/oauth/request_token';
-  const method = 'POST';
-  
-  // The callback URL should be properly encoded just once in the OAuth parameters
-  const oauthParams: Record<string, string> = {
-    oauth_callback: CALLBACK_URL
-  };
-  
-  // Generate authorization header
-  const authHeader = generateOAuthHeader(method, requestTokenURL, oauthParams);
-  
-  console.log("Requesting token with header:", authHeader);
-  console.log("Request URL:", requestTokenURL);
-  
-  try {
-    const response = await fetch(requestTokenURL, {
-      method: method,
-      headers: {
-        'Authorization': authHeader,
-        'Content-Type': 'application/x-www-form-urlencoded'
-      }
-    });
-    
-    const responseText = await response.text();
-    console.log("Response status:", response.status);
-    console.log("Response text:", responseText);
-    
-    if (!response.ok) {
-      throw new Error(`Error getting request token: ${response.status} ${response.statusText} - ${responseText}`);
-    }
-    
-    // Parse response parameters
-    const responseParts = responseText.split('&');
-    const responseParams: Record<string, string> = {};
-    
-    for (const part of responseParts) {
-      const [key, value] = part.split('=');
-      responseParams[key] = value;
-    }
-    
-    if (!responseParams.oauth_token || !responseParams.oauth_token_secret) {
-      throw new Error("Invalid response: missing token or token secret");
-    }
-    
-    return {
-      oauth_token: responseParams.oauth_token,
-      oauth_token_secret: responseParams.oauth_token_secret,
-      oauth_callback_confirmed: responseParams.oauth_callback_confirmed
-    };
-  } catch (error) {
-    console.error("Error requesting token:", error);
-    throw error;
-  }
-}
-
-// Generate authentication URL
-async function generateTwitterAuthURL(): Promise<string> {
-  try {
-    const { oauth_token } = await getRequestToken();
-    
-    // Using the authorize endpoint which requires explicit user approval each time
-    const authURL = `https://api.twitter.com/oauth/authorize?oauth_token=${oauth_token}`;
-    console.log("Generated Auth URL:", authURL);
-    return authURL;
-  } catch (error) {
-    console.error("Error generating auth URL:", error);
-    throw error;
-  }
-}
-
-// Handle the Twitter callback
-async function handleCallback(url: URL): Promise<any> {
-  const oauth_token = url.searchParams.get("oauth_token");
-  const oauth_verifier = url.searchParams.get("oauth_verifier");
-  
-  console.log("Received callback with token:", oauth_token, "and verifier:", oauth_verifier);
-  
-  if (!oauth_token || !oauth_verifier) {
-    throw new Error("Missing oauth_token or oauth_verifier in callback");
-  }
-  
-  // Return success and include the origin of the request for dynamic redirect
-  return {
-    success: true,
-    token: oauth_token,
-    verifier: oauth_verifier,
-    message: "Successfully authenticated with Twitter"
-  };
 }
 
 // Twitter API v2 base URL
@@ -221,7 +128,7 @@ async function getUser() {
   const method = "GET";
   const authHeader = generateOAuthHeader(method, url, {}, ACCESS_TOKEN, ACCESS_TOKEN_SECRET);
   
-  console.log("Getting Twitter user profile");
+  console.log("[TWITTER-INTEGRATION] Getting Twitter user profile");
   
   try {
     const response = await fetch(url, {
@@ -233,8 +140,8 @@ async function getUser() {
     });
     
     const responseText = await response.text();
-    console.log("Response Status:", response.status);
-    console.log("Response Body:", responseText);
+    console.log("[TWITTER-INTEGRATION] Response Status:", response.status);
+    console.log("[TWITTER-INTEGRATION] Response Body:", responseText);
     
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
@@ -242,7 +149,7 @@ async function getUser() {
     
     return JSON.parse(responseText);
   } catch (error) {
-    console.error("Error fetching user:", error);
+    console.error("[TWITTER-INTEGRATION] Error fetching user:", error);
     throw error;
   }
 }
@@ -256,18 +163,20 @@ async function sendTweet(tweetText: string): Promise<any> {
   // Generate a unique OAuth header for this request
   const authHeader = generateOAuthHeader(method, url, {}, ACCESS_TOKEN, ACCESS_TOKEN_SECRET);
   
-  console.log("Sending tweet:", tweetText);
-  console.log("Request method:", method);
-  console.log("Request URL:", url);
-  console.log("Request body:", JSON.stringify(requestBody));
+  console.log("[TWITTER-INTEGRATION] Sending tweet:", tweetText);
+  console.log("[TWITTER-INTEGRATION] Request method:", method);
+  console.log("[TWITTER-INTEGRATION] Request URL:", url);
+  console.log("[TWITTER-INTEGRATION] Request body:", JSON.stringify(requestBody));
   
   try {
-    // Test access tokens with a GET request first to verify credentials
-    console.log("Testing Twitter credentials with a simple GET request first...");
-    const testUrl = `${BASE_URL}/users/me`;
+    // Add some common debugging validation to help troubleshoot issues
+    // 1. Check if token is valid for API requests
+    console.log("[TWITTER-INTEGRATION] Testing Twitter credentials with a simple GET request first...");
+    const testUrl = `${BASE_URL}/users/me?user.fields=created_at`;
     const testMethod = "GET";
     const testAuthHeader = generateOAuthHeader(testMethod, testUrl, {}, ACCESS_TOKEN, ACCESS_TOKEN_SECRET);
     
+    console.log("[TWITTER-INTEGRATION] Sending test GET request to:", testUrl);
     const testResponse = await fetch(testUrl, {
       method: testMethod,
       headers: {
@@ -277,14 +186,27 @@ async function sendTweet(tweetText: string): Promise<any> {
     });
     
     const testResponseText = await testResponse.text();
-    console.log("Test Response Status:", testResponse.status);
-    console.log("Test Response Body:", testResponseText);
+    console.log("[TWITTER-INTEGRATION] Test Response Status:", testResponse.status);
+    console.log("[TWITTER-INTEGRATION] Test Response Body:", testResponseText);
     
     if (!testResponse.ok) {
+      console.error("[TWITTER-INTEGRATION] Credentials test failed!");
+      
+      // Check if this is an auth issue
+      if (testResponse.status === 401) {
+        throw new Error(`Authentication failed: Your Twitter API credentials are invalid or expired. Status: ${testResponse.status}, Body: ${testResponseText}`);
+      }
+      
       throw new Error(`Credentials test failed! status: ${testResponse.status}, body: ${testResponseText}`);
     }
     
-    console.log("Credentials test passed. Proceeding with tweet...");
+    console.log("[TWITTER-INTEGRATION] Credentials test passed. Proceeding with tweet...");
+    
+    // 2. Check tweet text constraints
+    const tweetLength = tweetText.length;
+    if (tweetLength > 280) {
+      throw new Error(`Tweet exceeds maximum length of 280 characters (current: ${tweetLength})`);
+    }
     
     // Now send the actual tweet
     const response = await fetch(url, {
@@ -297,8 +219,8 @@ async function sendTweet(tweetText: string): Promise<any> {
     });
 
     const responseText = await response.text();
-    console.log("Tweet Response Status:", response.status);
-    console.log("Tweet Response Body:", responseText);
+    console.log("[TWITTER-INTEGRATION] Tweet Response Status:", response.status);
+    console.log("[TWITTER-INTEGRATION] Tweet Response Body:", responseText);
 
     if (!response.ok) {
       // Specific handling for 403 Forbidden errors
@@ -314,7 +236,7 @@ async function sendTweet(tweetText: string): Promise<any> {
             message: "This error indicates your access tokens don't have write permissions.",
             solution: "You need to regenerate your Twitter access tokens after enabling 'Read and write' permissions. Go to the Twitter Developer Portal, find your app's 'Keys and tokens' tab, and regenerate your 'Access Token and Secret'. Then update TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings."
           };
-          console.error("Detailed 403 error:", JSON.stringify(errorDetail, null, 2));
+          console.error("[TWITTER-INTEGRATION] Detailed 403 error:", JSON.stringify(errorDetail, null, 2));
           throw new Error(`403 Forbidden: ${errorBody.detail || "You don't have permission to post tweets"}. ${JSON.stringify(errorDetail)}`);
         } catch (parseError) {
           const errorDetail = {
@@ -327,92 +249,17 @@ async function sendTweet(tweetText: string): Promise<any> {
         }
       }
       
+      // Handle duplicate content errors
+      if (response.status === 400 && responseText.includes("duplicate")) {
+        throw new Error(`Duplicate content: Twitter doesn't allow posting identical tweets. Please modify your content slightly and try again.`);
+      }
+      
       throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
     }
 
     return JSON.parse(responseText);
   } catch (error) {
-    console.error("Error sending tweet:", error);
-    throw error;
-  }
-}
-
-// Get user profile details with profile image and follower metrics
-async function getUserProfile() {
-  const url = `${BASE_URL}/users/me?user.fields=profile_image_url,description,public_metrics`;
-  const method = "GET";
-  const authHeader = generateOAuthHeader(method, url, {}, ACCESS_TOKEN, ACCESS_TOKEN_SECRET);
-  
-  console.log("Getting Twitter user profile with expanded fields");
-  
-  try {
-    const response = await fetch(url, {
-      method: method,
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-      },
-    });
-    
-    const responseText = await response.text();
-    console.log("Response Status:", response.status);
-    console.log("Response Body:", responseText);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
-    }
-    
-    return JSON.parse(responseText);
-  } catch (error) {
-    console.error("Error fetching profile:", error);
-    throw error;
-  }
-}
-
-// Get user tweets
-async function getUserTweets(limit = 10) {
-  const userProfile = await getUser();
-  const userId = userProfile.data.id;
-  
-  if (!userId) {
-    throw new Error("Could not determine user ID");
-  }
-  
-  console.log(`Fetching tweets for user ID: ${userId}, limit: ${limit}`);
-  
-  const params = new URLSearchParams({
-    'max_results': limit.toString(),
-    'tweet.fields': 'created_at,public_metrics,attachments,entities',
-    'expansions': 'attachments.media_keys',
-    'media.fields': 'url,preview_image_url,type'
-  });
-  
-  const url = `${BASE_URL}/users/${userId}/tweets?${params.toString()}`;
-  const method = "GET";
-  const authHeader = generateOAuthHeader(method, url, {}, ACCESS_TOKEN, ACCESS_TOKEN_SECRET);
-  
-  console.log("Getting user tweets with URL:", url);
-  
-  try {
-    const response = await fetch(url, {
-      method: method,
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-      },
-    });
-    
-    const responseText = await response.text();
-    console.log("Response Status:", response.status);
-    console.log("Response Body:", responseText);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
-    }
-    
-    return JSON.parse(responseText);
-  } catch (error) {
-    console.error("Error fetching tweets:", error);
+    console.error("[TWITTER-INTEGRATION] Error sending tweet:", error);
     throw error;
   }
 }
@@ -420,35 +267,60 @@ async function getUserTweets(limit = 10) {
 // Verify Twitter credentials
 async function verifyCredentials(): Promise<any> {
   try {
-    const user = await getUser();
-    return {
-      verified: true,
-      user: user.data,
-      message: "Twitter credentials verified successfully"
-    };
+    // 1. Get the token from environment variables
+    if (!API_KEY || !API_SECRET || !ACCESS_TOKEN || !ACCESS_TOKEN_SECRET) {
+      return {
+        verified: false,
+        message: "Missing Twitter API credentials. Please check your environment variables.",
+        missingCredentials: true
+      };
+    }
+    
+    // 2. Validate token by making a simple API call
+    console.log("[TWITTER-INTEGRATION] Testing Twitter credentials...");
+    try {
+      const user = await getUser();
+      console.log("[TWITTER-INTEGRATION] User fetched successfully:", user.data?.id);
+      
+      // 3. Try to detect if app has write permissions by checking user object
+      // We can't directly check permissions, but we can infer from successful API calls
+      return {
+        verified: true,
+        user: user.data,
+        message: "Twitter credentials verified successfully",
+        accessTokenPrefix: ACCESS_TOKEN.substring(0, 5) + "..." // Share prefix for debugging
+      };
+    } catch (apiError) {
+      console.error("[TWITTER-INTEGRATION] API Error during verification:", apiError);
+      
+      let errorMessage = apiError instanceof Error ? apiError.message : "Unknown error";
+      let permissionsIssue = false;
+      
+      // Try to identify permission issues from error messages
+      if (errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
+        errorMessage = "Twitter authentication failed. Your credentials may be invalid or expired.";
+      } else if (errorMessage.includes("403") || errorMessage.includes("Forbidden")) {
+        errorMessage = "Twitter authorization failed. Your app may not have the required permissions.";
+        permissionsIssue = true;
+      }
+      
+      return {
+        verified: false,
+        message: errorMessage,
+        permissionsIssue,
+        credentials: {
+          hasApiKey: !!API_KEY,
+          hasApiSecret: !!API_SECRET,
+          hasAccessToken: !!ACCESS_TOKEN,
+          hasAccessTokenSecret: !!ACCESS_TOKEN_SECRET
+        }
+      };
+    }
   } catch (error) {
-    console.error("Error verifying Twitter credentials:", error);
+    console.error("[TWITTER-INTEGRATION] Error verifying Twitter credentials:", error);
     return {
       verified: false,
       message: error instanceof Error ? error.message : "Unknown error verifying credentials"
-    };
-  }
-}
-
-// Initiate OAuth authentication flow
-async function initiateOAuth(): Promise<any> {
-  try {
-    const authURL = await generateTwitterAuthURL();
-    return {
-      success: true,
-      authURL,
-      message: "Twitter authentication URL generated"
-    };
-  } catch (error) {
-    console.error("Error generating Twitter authentication URL:", error);
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Unknown error generating authentication URL"
     };
   }
 }
@@ -460,53 +332,20 @@ serve(async (req) => {
   }
   
   try {
+    console.log("[TWITTER-INTEGRATION] Request received");
     validateEnvironmentVariables();
     
     // Extract URL path to determine the endpoint
     const url = new URL(req.url);
     const endpoint = url.pathname.split('/').pop() || '';
     
-    console.log(`Processing request for endpoint: ${endpoint}, method: ${req.method}, URL: ${req.url}`);
-    
-    // Handle the callback from Twitter
-    if (endpoint === 'callback' || url.pathname.includes('/callback')) {
-      console.log("Handling Twitter callback");
-      const result = await handleCallback(url);
-      
-      // Get the application URL for redirect - updated to use the production URL
-      const appUrl = "https://contentory-manager.lovable.app/settings?auth=success";
-      
-      // Return HTML that will post a message to the opener window and then close itself
-      return new Response(
-        `<html><body>
-          <script>
-            // Post message to the parent window that opened this window
-            if (window.opener) {
-              window.opener.postMessage({type: "TWITTER_AUTH_SUCCESS", data: ${JSON.stringify(result)}}, "*");
-              console.log("Posted authentication success message to opener");
-              // Close the popup window after posting the message
-              window.close();
-            } else {
-              // If window.opener is not available, redirect to the application
-              window.location.href = "${appUrl}";
-            }
-          </script>
-          <p>Authentication successful. You can close this window and return to the application.</p>
-        </body></html>`,
-        { 
-          headers: { 
-            ...corsHeaders,
-            "Content-Type": "text/html"
-          }
-        }
-      );
-    }
+    console.log(`[TWITTER-INTEGRATION] Processing request for endpoint: ${endpoint}, method: ${req.method}, URL: ${req.url}`);
     
     // For POST requests, parse the JSON body
     let body = {};
     if (req.method === 'POST') {
       body = await req.json().catch(() => ({}));
-      console.log("Request body:", body);
+      console.log("[TWITTER-INTEGRATION] Request body:", JSON.stringify(body));
     }
     
     if (endpoint === 'verify' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'verify') {
@@ -534,21 +373,29 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       } catch (error) {
-        console.error("Tweet error details:", error);
+        console.error("[TWITTER-INTEGRATION] Tweet error details:", error);
         
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
         let status = 500;
         let responseBody: any = { 
           success: false,
           error: "Failed to post tweet", 
-          details: errorMessage
+          details: errorMessage,
+          timestamp: new Date().toISOString()
         };
         
         // Check if this is a permissions issue
-        if (errorMessage.includes("Forbidden") || errorMessage.includes("403")) {
+        if (errorMessage.includes("Forbidden") || errorMessage.includes("403") || errorMessage.includes("don't have permission")) {
           status = 403;
           responseBody.instructions = "After updating permissions in the Twitter Developer Portal to 'Read and write', you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings.";
           responseBody.tokenInfo = "The original access tokens retain their original permission level, even after updating the app permissions. You must generate new tokens after changing permissions.";
+        }
+        
+        // Check if this is a duplicate content issue
+        if (errorMessage.includes("duplicate")) {
+          status = 400;
+          responseBody.error = "Duplicate content error";
+          responseBody.details = "Twitter doesn't allow posting identical tweets. Try modifying your content slightly.";
         }
         
         return new Response(JSON.stringify(responseBody), {
@@ -556,37 +403,11 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-    } else if (endpoint === 'user' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'user') {
-      const user = await getUser();
-      return new Response(JSON.stringify(user), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    } else if (endpoint === 'profile' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'profile') {
-      const profile = await getUserProfile();
-      return new Response(JSON.stringify(profile), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    } else if (endpoint === 'tweets' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'tweets') {
-      const limit = (body as any).limit || 50;
-      const tweets = await getUserTweets(limit);
-      return new Response(JSON.stringify(tweets), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    } else if (endpoint === 'auth' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'auth') {
-      const result = await initiateOAuth();
-      return new Response(JSON.stringify(result), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
     } else {
       const allEndpoints = {
         endpoints: {
           "/verify": "Verify Twitter credentials",
-          "/tweet": "Send a tweet",
-          "/user": "Get user profile",
-          "/profile": "Get detailed profile with follower metrics",
-          "/tweets": "Get user tweets",
-          "/auth": "Initiate OAuth flow",
-          "/callback": "Handle Twitter OAuth callback"
+          "/tweet": "Send a tweet"
         },
         message: "Twitter Integration API"
       };
@@ -596,8 +417,12 @@ serve(async (req) => {
       });
     }
   } catch (error: any) {
-    console.error("An error occurred:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    console.error("[TWITTER-INTEGRATION] An error occurred:", error);
+    return new Response(JSON.stringify({ 
+      error: error.message,
+      timestamp: new Date().toISOString(),
+      stack: error.stack
+    }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
