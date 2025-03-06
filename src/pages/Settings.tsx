@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -22,12 +23,14 @@ const Settings = () => {
     { platform: 'instagram', connected: false }
   ]);
   const [pageError, setPageError] = useState<string | null>(null);
-  const { session, loading: authLoading } = useAuth();
+  const { session, user, loading: authLoading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   
+  console.log("Settings component rendering:", { session, user, authLoading });
+  
   useEffect(() => {
-    console.log("Settings component mounted, auth status:", { session, authLoading });
+    console.log("Settings component mounted, auth status:", { session, authLoading, user });
     
     if (!authLoading && session?.user) {
       loadUserSettings();
@@ -38,6 +41,7 @@ const Settings = () => {
       const oauthVerifier = params.get('oauth_verifier');
       
       if (oauthToken && oauthVerifier) {
+        console.log("Found OAuth params, processing Twitter callback:", { oauthToken, oauthVerifier });
         navigate('/settings', { replace: true });
         handleTwitterCallback(oauthToken, oauthVerifier);
       }
@@ -61,7 +65,7 @@ const Settings = () => {
       
       if (data) {
         console.log("User settings loaded:", data);
-        setNotifications(data.enable_notifications);
+        setNotifications(data.enable_notifications ?? true);
         setDarkMode(data.theme === 'dark');
       }
     } catch (error) {
@@ -194,11 +198,8 @@ const Settings = () => {
     
     setImportLoading(true);
     try {
-      const twitterService = await TwitterApiService.create(session);
-      
-      if (!twitterService) {
-        throw new Error('Could not initialize Twitter service');
-      }
+      toast.info('Starting Twitter import...');
+      const twitterService = new TwitterApiService(session.user.id);
       
       const result = await twitterService.fetchUserTweets(50);
       
@@ -220,6 +221,9 @@ const Settings = () => {
   const ACCESS_TOKEN_PLACEHOLDER = "placeholder_access_token";
   const ACCESS_TOKEN_SECRET_PLACEHOLDER = "placeholder_access_token_secret";
 
+  console.log("Rendering settings with auth state:", { authLoading, loggedIn: !!session?.user, session, pageError });
+
+  // Show loading state
   if (authLoading) {
     return (
       <div className="container mx-auto py-6 flex items-center justify-center min-h-[60vh]">
@@ -228,6 +232,7 @@ const Settings = () => {
     );
   }
   
+  // Show login prompt if not logged in
   if (!session?.user && !authLoading) {
     return (
       <div className="container mx-auto py-6 space-y-8">
@@ -244,6 +249,7 @@ const Settings = () => {
     );
   }
   
+  // Show error state
   if (pageError) {
     return (
       <div className="container mx-auto py-6 space-y-8">
