@@ -38,19 +38,30 @@ function generateOAuthSignature(
   url: string,
   params: Record<string, string>,
   consumerSecret: string,
-  tokenSecret: string
+  tokenSecret: string = "" // Token secret is empty for request token step
 ): string {
+  // Sort parameters by key (required for signature base string)
+  const sortedParams = Object.keys(params).sort().reduce(
+    (acc, key) => {
+      acc[key] = params[key];
+      return acc;
+    }, 
+    {} as Record<string, string>
+  );
+
+  // Create signature base string
   const signatureBaseString = `${method}&${encodeURIComponent(
     url
   )}&${encodeURIComponent(
-    Object.entries(params)
-      .sort()
-      .map(([k, v]) => `${k}=${v}`)
+    Object.entries(sortedParams)
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
       .join("&")
   )}`;
-  const signingKey = `${encodeURIComponent(
-    consumerSecret
-  )}&${encodeURIComponent(tokenSecret)}`;
+  
+  // Create signing key
+  const signingKey = `${encodeURIComponent(consumerSecret)}&${encodeURIComponent(tokenSecret)}`;
+  
+  // Generate HMAC-SHA1 signature
   const hmacSha1 = createHmac("sha1", signingKey);
   const signature = hmacSha1.update(signatureBaseString).digest("base64");
 
@@ -61,36 +72,44 @@ function generateOAuthSignature(
 }
 
 // Generate OAuth header for Twitter API requests
-function generateOAuthHeader(method: string, url: string): string {
-  const oauthParams = {
+function generateOAuthHeader(
+  method: string, 
+  url: string, 
+  extraParams: Record<string, string> = {},
+  token = ACCESS_TOKEN,
+  tokenSecret = ACCESS_TOKEN_SECRET
+): string {
+  const oauthParams: Record<string, string> = {
     oauth_consumer_key: API_KEY!,
     oauth_nonce: Math.random().toString(36).substring(2),
     oauth_signature_method: "HMAC-SHA1",
     oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
-    oauth_token: ACCESS_TOKEN!,
     oauth_version: "1.0",
+    ...extraParams
   };
+
+  // Add token if available (not used in request token step)
+  if (token) {
+    oauthParams.oauth_token = token;
+  }
 
   const signature = generateOAuthSignature(
     method,
     url,
     oauthParams,
     API_SECRET!,
-    ACCESS_TOKEN_SECRET!
+    tokenSecret
   );
 
-  const signedOAuthParams = {
+  const headerParams = {
     ...oauthParams,
     oauth_signature: signature,
   };
 
-  const entries = Object.entries(signedOAuthParams).sort((a, b) =>
-    a[0].localeCompare(b[0])
-  );
-
   return (
     "OAuth " +
-    entries
+    Object.entries(headerParams)
+      .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([k, v]) => `${encodeURIComponent(k)}="${encodeURIComponent(v)}"`)
       .join(", ")
   );
@@ -101,32 +120,19 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
   const requestTokenURL = 'https://api.twitter.com/oauth/request_token';
   const method = 'POST';
   
-  // Create OAuth parameters including the callback URL
+  // Include callback URL in the parameters for the signature
   const oauthParams: Record<string, string> = {
-    oauth_callback: encodeURIComponent(CALLBACK_URL),
-    oauth_consumer_key: API_KEY!,
-    oauth_nonce: Math.random().toString(36).substring(2),
-    oauth_signature_method: 'HMAC-SHA1',
-    oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
-    oauth_version: '1.0'
+    oauth_callback: CALLBACK_URL,
   };
 
-  // Generate signature for the request token
-  const signature = generateOAuthSignature(
+  // Generate OAuth header with the callback parameter
+  const oauthHeader = generateOAuthHeader(
     method,
     requestTokenURL,
     oauthParams,
-    API_SECRET!,
-    '' // Empty token secret for request token
+    "", // No token for request token step
+    ""  // No token secret for request token step
   );
-
-  const oauthHeader = 'OAuth ' +
-    Object.entries({
-      ...oauthParams,
-      oauth_signature: signature
-    })
-    .map(([k, v]) => `${encodeURIComponent(k)}="${encodeURIComponent(v)}"`)
-    .join(', ');
 
   console.log("OAuth Header for Request Token:", oauthHeader);
 
