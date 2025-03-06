@@ -6,7 +6,7 @@ const API_KEY = Deno.env.get("TWITTER_API_KEY")?.trim();
 const API_SECRET = Deno.env.get("TWITTER_API_SECRET")?.trim();
 const ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
 const ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")?.trim();
-const CALLBACK_URL = "https://fxzamjowvpnyuxthusib.supabase.co/functions/v1/twitter-integration/callback";
+const CALLBACK_URL = "http://localhost:54321/auth/v1/callback";
 
 // CORS headers for browser requests
 const corsHeaders = {
@@ -277,8 +277,6 @@ async function sendTweet(tweetText: string): Promise<any> {
 
 // Get user profile details with profile image and follower metrics
 async function getUserProfile() {
-  // The /users/me endpoint without field expansions doesn't include the data we need
-  // Let's use it with expanded fields
   const url = `${BASE_URL}/users/me?user.fields=profile_image_url,description,public_metrics`;
   const method = "GET";
   const authHeader = generateOAuthHeader(method, url, {}, ACCESS_TOKEN, ACCESS_TOKEN_SECRET);
@@ -311,7 +309,6 @@ async function getUserProfile() {
 
 // Get user tweets
 async function getUserTweets(limit = 10) {
-  // First get the user ID from the user profile
   const userProfile = await getUser();
   const userId = userProfile.data.id;
   
@@ -321,7 +318,6 @@ async function getUserTweets(limit = 10) {
   
   console.log(`Fetching tweets for user ID: ${userId}, limit: ${limit}`);
   
-  // Construct URL with query parameters
   const params = new URLSearchParams({
     'max_results': limit.toString(),
     'tweet.fields': 'created_at,public_metrics,attachments,entities',
@@ -452,13 +448,11 @@ serve(async (req) => {
     }
     
     if (endpoint === 'verify' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'verify') {
-      // Verify Twitter credentials
       const result = await verifyCredentials();
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } else if (endpoint === 'tweet' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'tweet') {
-      // Send a tweet
       const tweetText = (body as any).text;
       
       if (!tweetText) {
@@ -468,7 +462,6 @@ serve(async (req) => {
         });
       }
       
-      // Add a random string to prevent duplicate tweet errors
       const randomSuffix = Math.random().toString(36).substring(2, 6);
       const uniqueTweetText = `${tweetText} #${randomSuffix}`;
       
@@ -477,32 +470,27 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } else if (endpoint === 'user' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'user') {
-      // Get user profile
       const user = await getUser();
       return new Response(JSON.stringify(user), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } else if (endpoint === 'profile' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'profile') {
-      // Get detailed user profile
       const profile = await getUserProfile();
       return new Response(JSON.stringify(profile), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } else if (endpoint === 'tweets' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'tweets') {
-      // Get user tweets - increase default limit to fetch more tweets
-      const limit = (body as any).limit || 50; // Increase default limit to 50
+      const limit = (body as any).limit || 50;
       const tweets = await getUserTweets(limit);
       return new Response(JSON.stringify(tweets), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } else if (endpoint === 'auth' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'auth') {
-      // Initiate OAuth flow
       const result = await initiateOAuth();
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } else {
-      // Default response for the root endpoint or unknown endpoints
       const allEndpoints = {
         endpoints: {
           "/verify": "Verify Twitter credentials",
