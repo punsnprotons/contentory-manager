@@ -64,31 +64,40 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signUp = async (email: string, password: string) => {
     try {
-      // Set data.email_confirm to true to auto-confirm email
+      // First, sign up the user
       const { data, error } = await supabase.auth.signUp({ 
         email, 
         password,
         options: {
-          data: {
-            email_confirmed: true
-          },
+          // Note: this doesn't actually auto-confirm the email as that's a server-side setting
           emailRedirectTo: window.location.origin + '/auth',
         }
       });
       
-      if (!error) {
-        // Since we want to auto-login after signup, let's sign in immediately
-        const { error: signInError } = await supabase.auth.signInWithPassword({ 
-          email, 
-          password 
+      if (error) {
+        toast({
+          title: "Registration failed",
+          description: error.message,
+          variant: "destructive",
         });
-        
-        if (!signInError) {
+        return { error, data: null };
+      }
+      
+      // After successful registration, try to sign in
+      const { error: signInError } = await supabase.auth.signInWithPassword({ 
+        email, 
+        password 
+      });
+      
+      if (signInError) {
+        // If the sign-in fails with email_not_confirmed, show a more helpful message
+        if (signInError.message.includes("Email not confirmed")) {
           toast({
-            title: "Success",
-            description: "Account created and logged in successfully",
+            title: "Account created successfully",
+            description: "Please check your email for a confirmation link before logging in.",
           });
-          navigate('/dashboard');
+          // Navigate to login page
+          navigate('/auth');
         } else {
           toast({
             title: "Sign in failed after registration",
@@ -96,9 +105,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             variant: "destructive",
           });
         }
+      } else {
+        // If sign-in is successful
+        toast({
+          title: "Success",
+          description: "Account created and logged in successfully",
+        });
+        navigate('/dashboard');
       }
       
-      return { error, data };
+      return { error: error || signInError, data };
     } catch (err) {
       return { error: err as Error, data: null };
     }

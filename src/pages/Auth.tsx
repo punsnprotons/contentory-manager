@@ -16,6 +16,7 @@ const Auth: React.FC = () => {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState('login');
+  const [registrationComplete, setRegistrationComplete] = useState(false);
 
   // If user is already logged in, redirect to dashboard
   if (user && !loading) {
@@ -76,11 +77,23 @@ const Auth: React.FC = () => {
       const { error } = await signUp(email, password);
       
       if (error) {
-        toast({
-          title: 'Registration failed',
-          description: error.message,
-          variant: 'destructive',
-        });
+        if (error.message.includes("User already registered")) {
+          toast({
+            title: 'Account exists',
+            description: 'This email is already registered. Please sign in instead.',
+            variant: 'destructive',
+          });
+          setActiveTab('login');
+        } else {
+          toast({
+            title: 'Registration failed',
+            description: error.message,
+            variant: 'destructive',
+          });
+        }
+      } else {
+        // Even if there's no error but email confirmation is required
+        setRegistrationComplete(true);
       }
     } finally {
       setIsSubmitting(false);
@@ -151,46 +164,71 @@ const Auth: React.FC = () => {
             </form>
           </TabsContent>
           <TabsContent value="register">
-            <form onSubmit={handleSignUp}>
+            {registrationComplete ? (
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="register-email">Email</Label>
-                  <Input 
-                    id="register-email" 
-                    type="email" 
-                    placeholder="your@email.com" 
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    disabled={isSubmitting}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="register-password">Password</Label>
-                  <Input 
-                    id="register-password" 
-                    type="password" 
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    disabled={isSubmitting}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Password must be at least 6 characters long
+                <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-md border border-green-100 dark:border-green-900">
+                  <h3 className="font-medium text-green-800 dark:text-green-300">Registration successful!</h3>
+                  <p className="text-sm text-green-700 dark:text-green-400 mt-1">
+                    {supabase.auth.getSettings ? (
+                      <>Please check your email for a confirmation link before logging in.</>
+                    ) : (
+                      <>You can now sign in with your email and password.</>
+                    )}
                   </p>
                 </div>
-              </CardContent>
-              <CardFooter>
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Creating Account...
-                    </>
-                  ) : (
-                    'Create Account'
-                  )}
+                <Button 
+                  variant="outline" 
+                  className="w-full" 
+                  onClick={() => {
+                    setRegistrationComplete(false);
+                    setActiveTab('login');
+                  }}
+                >
+                  Go to Login
                 </Button>
-              </CardFooter>
-            </form>
+              </CardContent>
+            ) : (
+              <form onSubmit={handleSignUp}>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="register-email">Email</Label>
+                    <Input 
+                      id="register-email" 
+                      type="email" 
+                      placeholder="your@email.com" 
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="register-password">Password</Label>
+                    <Input 
+                      id="register-password" 
+                      type="password" 
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      disabled={isSubmitting}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Password must be at least 6 characters long
+                    </p>
+                  </div>
+                </CardContent>
+                <CardFooter>
+                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Creating Account...
+                      </>
+                    ) : (
+                      'Create Account'
+                    )}
+                  </Button>
+                </CardFooter>
+              </form>
+            )}
           </TabsContent>
         </Tabs>
       </Card>
