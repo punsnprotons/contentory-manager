@@ -79,17 +79,42 @@ serve(async (req) => {
         
         // Check if error contains JSON with more details
         try {
-          if (typeof error.message === 'string' && error.message.includes('{')) {
-            // Extract the JSON part of the error message if present
-            const jsonStart = error.message.indexOf('{');
-            const jsonEnd = error.message.lastIndexOf('}') + 1;
-            const jsonString = error.message.substring(jsonStart, jsonEnd);
-            const parsedError = JSON.parse(jsonString);
+          const errorResponse = {
+            success: false,
+            error: 'Failed to post tweet',
+            originalError: error.message
+          };
+          
+          if (typeof error.message === 'string') {
+            // First, try to extract the JSON part of the error message if present
+            if (error.message.includes('{')) {
+              try {
+                const jsonStart = error.message.indexOf('{');
+                const jsonEnd = error.message.lastIndexOf('}') + 1;
+                const jsonString = error.message.substring(jsonStart, jsonEnd);
+                const parsedError = JSON.parse(jsonString);
+                
+                errorResponse.details = parsedError.detail || parsedError.message || parsedError.body;
+                errorResponse.status = parsedError.status;
+                errorResponse.instructions = parsedError.solution || parsedError.instructions;
+              } catch (parseError) {
+                console.error('Error parsing JSON from error message:', parseError);
+              }
+            }
             
-            throw new Error(`Failed to post tweet: ${parsedError.details || parsedError.message || error.message}`);
+            // Check for 403 error to give specific remediation steps
+            if (error.message.includes('403') || error.message.includes('Forbidden')) {
+              errorResponse.error = 'Twitter API permission error';
+              errorResponse.remediation = 'After updating permissions in the Twitter Developer Portal to "Read and write", you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings.';
+            }
           }
-        } catch {
-          // If we can't parse JSON, just use the original error
+          
+          return new Response(JSON.stringify(errorResponse), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } catch (parseError) {
+          console.error('Error parsing error details:', parseError);
         }
         
         throw new Error(`Failed to post tweet: ${error.message}`);
@@ -146,20 +171,21 @@ serve(async (req) => {
     // Check for specific error messages that indicate permission issues
     let errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     let statusCode = 500;
+    let instructions = undefined;
     
     // Provide more specific error messages and instructions
-    if (errorMessage.includes('Forbidden') || errorMessage.includes('403')) {
-      errorMessage = 'Twitter API permission error: Your app may not have write permissions enabled or your access tokens may be outdated. Please go to the Twitter Developer Portal, ensure "Read and write" or "Read and write and Direct message" permissions are selected, and regenerate your access tokens. Then update the TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings.';
+    if (errorMessage.includes('Forbidden') || errorMessage.includes('403') || errorMessage.includes('permission')) {
       statusCode = 403;
+      errorMessage = 'Twitter API permission error: Your Twitter access tokens don\'t have write permissions. You need to generate new access tokens after enabling "Read and write" permissions.';
+      instructions = "After updating permissions in the Twitter Developer Portal to 'Read and write', you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings.";
     }
     
     return new Response(
       JSON.stringify({
         success: false,
         error: errorMessage,
-        instructions: statusCode === 403 ? 
-          "After updating permissions in the Twitter Developer Portal, you need to regenerate your access tokens and update the TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings." : 
-          undefined
+        instructions,
+        status: statusCode
       }),
       {
         status: statusCode,

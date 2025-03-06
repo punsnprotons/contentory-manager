@@ -125,7 +125,7 @@ export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Pro
   }
 };
 
-export const publishToTwitter = async (content: string, mediaUrl?: string): Promise<{ success: boolean; message: string; error?: string; data?: any }> => {
+export const publishToTwitter = async (content: string, mediaUrl?: string): Promise<{ success: boolean; message: string; error?: string; data?: any; instructions?: string }> => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     
@@ -153,12 +153,39 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
     if (response.error) {
       console.error('Twitter API error:', response.error);
       
-      const errorMessage = response.error.message || '';
-      if (errorMessage.includes('Forbidden') || errorMessage.includes('403') || errorMessage.includes('permissions')) {
+      if (response.error.message && typeof response.error.message === 'string') {
+        const errorMessage = response.error.message;
+        
+        if (errorMessage.includes('{') && errorMessage.includes('}')) {
+          try {
+            const jsonStart = errorMessage.indexOf('{');
+            const jsonEnd = errorMessage.lastIndexOf('}') + 1;
+            const jsonString = errorMessage.substring(jsonStart, jsonEnd);
+            const parsedError = JSON.parse(jsonString);
+            
+            return {
+              success: false,
+              message: parsedError.title || 'Twitter API error',
+              error: parsedError.detail || errorMessage,
+              instructions: parsedError.solution || parsedError.instructions || 
+                (parsedError.status === 403 ? 
+                  "After updating permissions in the Twitter Developer Portal to 'Read and write', you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings." : 
+                  undefined)
+            };
+          } catch (parseError) {
+            console.error('Error parsing JSON from error message:', parseError);
+          }
+        }
+      }
+      
+      if (response.error.message?.includes('403') || 
+          response.error.message?.includes('Forbidden') ||
+          response.error.message?.includes('permission')) {
         return {
           success: false,
-          message: 'Twitter API permission error',
-          error: 'Your Twitter app does not have write permissions. Please update permissions in the Twitter Developer Portal and regenerate your access tokens.'
+          message: 'Twitter API Permission Error',
+          error: response.error.message,
+          instructions: "After updating permissions in the Twitter Developer Portal to 'Read and write', you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings."
         };
       }
       

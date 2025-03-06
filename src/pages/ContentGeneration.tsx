@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Sparkles, LayoutGrid, Image, Video, AlignLeft, Send, RotateCw, Save } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { publishToTwitter } from "@/components/ui/RefreshDataButton";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const ContentGeneration: React.FC = () => {
   const [selectedContentType, setSelectedContentType] = useState<ContentType>("text");
@@ -24,6 +26,11 @@ const ContentGeneration: React.FC = () => {
   const [mediaUrl, setMediaUrl] = useState<string | undefined>(undefined);
   const [contentId, setContentId] = useState<string | null>(null);
   const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false);
+  const [isErrorDialogOpen, setIsErrorDialogOpen] = useState(false);
+  const [errorDetails, setErrorDetails] = useState<{title: string, message: string, instructions?: string}>({
+    title: "",
+    message: ""
+  });
   
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -114,16 +121,23 @@ const ContentGeneration: React.FC = () => {
         const twitterResult = await publishToTwitter(generatedContent, mediaUrl);
         
         if (!twitterResult.success) {
-          const errorMessage = twitterResult.error || twitterResult.message;
+          toast.dismiss();
           
-          if (errorMessage.includes('permission') || errorMessage.includes('Forbidden') || errorMessage.includes('403')) {
-            toast.error('Twitter API Permission Error', {
-              description: 'Your Twitter app needs "Read and write" permissions. Please update permissions in the Twitter Developer Portal, regenerate your access tokens, and update them in Supabase.',
-              duration: 8000,
+          // Display a more detailed error dialog for Twitter API permission issues
+          if (twitterResult.error?.includes('permission') || 
+              twitterResult.error?.includes('Forbidden') || 
+              twitterResult.error?.includes('403')) {
+            
+            setErrorDetails({
+              title: 'Twitter API Permission Error',
+              message: 'Your Twitter app does not have write permissions or your access tokens need to be regenerated.',
+              instructions: twitterResult.instructions || 
+                'After updating permissions in the Twitter Developer Portal to "Read and write", you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings.'
             });
+            setIsErrorDialogOpen(true);
           } else {
             toast.error('Failed to publish to Twitter', {
-              description: errorMessage,
+              description: twitterResult.error || twitterResult.message,
             });
           }
           return;
@@ -457,6 +471,40 @@ const ContentGeneration: React.FC = () => {
         onSchedule={handleScheduleConfirm}
         isScheduling={isSaving}
       />
+      
+      {/* Twitter error dialog with detailed instructions */}
+      <Dialog open={isErrorDialogOpen} onOpenChange={setIsErrorDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-500">{errorDetails.title}</DialogTitle>
+            <DialogDescription>
+              {errorDetails.message}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="bg-amber-50 p-4 rounded-md border border-amber-200">
+              <h3 className="font-medium text-amber-800 mb-2">How to fix this issue:</h3>
+              <ol className="list-decimal list-inside text-amber-700 space-y-2">
+                <li>Go to the Twitter Developer Portal</li>
+                <li>Select your app and navigate to "User authentication settings"</li>
+                <li>Ensure that "Read and write" permissions are selected</li>
+                <li>Go to the "Keys and tokens" tab</li>
+                <li>Regenerate your "Access Token and Secret"</li>
+                <li>Update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings</li>
+              </ol>
+            </div>
+            
+            <div className="text-sm text-gray-500 italic">
+              Note: The original access tokens retain their original permission level, even after updating app permissions. You must generate new tokens after changing permissions.
+            </div>
+            
+            <div className="flex justify-end">
+              <Button onClick={() => setIsErrorDialogOpen(false)}>Close</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -30,6 +30,12 @@ function validateEnvironmentVariables() {
   
   console.log("All Twitter API credentials are present");
   console.log("Using callback URL:", CALLBACK_URL);
+  console.log("API_KEY length:", API_KEY?.length);
+  console.log("API_SECRET length:", API_SECRET?.length);
+  console.log("ACCESS_TOKEN length:", ACCESS_TOKEN?.length);
+  console.log("ACCESS_TOKEN_SECRET length:", ACCESS_TOKEN_SECRET?.length);
+  console.log("ACCESS_TOKEN first 5 chars:", ACCESS_TOKEN?.substring(0, 5));
+  console.log("ACCESS_TOKEN_SECRET first 5 chars:", ACCESS_TOKEN_SECRET?.substring(0, 5));
 }
 
 // Generate OAuth 1.0a signature
@@ -62,7 +68,7 @@ function generateOAuthSignature(
   
   console.log("Parameter String:", parameterString);
   console.log("Signature Base String:", signatureBaseString);
-  console.log("Signing Key:", signingKey);
+  console.log("Signing Key pattern:", signingKey.replace(/./g, '*') + " (redacted for security)");
   console.log("Generated Signature:", signature);
   
   return signature;
@@ -109,7 +115,7 @@ function generateOAuthHeader(
     .map(key => `${encodeURIComponent(key)}="${encodeURIComponent(oauthParams[key])}"`)
     .join(', ');
     
-  console.log("Full OAuth Header:", authHeader);
+  console.log("Full OAuth Header pattern:", authHeader.substring(0, 20) + "... (abbreviated for security)");
   return authHeader;
 }
 
@@ -247,11 +253,40 @@ async function sendTweet(tweetText: string): Promise<any> {
   const method = "POST";
   const requestBody = { text: tweetText };
 
+  // Generate a unique OAuth header for this request
   const authHeader = generateOAuthHeader(method, url, {}, ACCESS_TOKEN, ACCESS_TOKEN_SECRET);
   
   console.log("Sending tweet:", tweetText);
+  console.log("Request method:", method);
+  console.log("Request URL:", url);
+  console.log("Request body:", JSON.stringify(requestBody));
   
   try {
+    // Test access tokens with a GET request first to verify credentials
+    console.log("Testing Twitter credentials with a simple GET request first...");
+    const testUrl = `${BASE_URL}/users/me`;
+    const testMethod = "GET";
+    const testAuthHeader = generateOAuthHeader(testMethod, testUrl, {}, ACCESS_TOKEN, ACCESS_TOKEN_SECRET);
+    
+    const testResponse = await fetch(testUrl, {
+      method: testMethod,
+      headers: {
+        Authorization: testAuthHeader,
+        "Content-Type": "application/json",
+      },
+    });
+    
+    const testResponseText = await testResponse.text();
+    console.log("Test Response Status:", testResponse.status);
+    console.log("Test Response Body:", testResponseText);
+    
+    if (!testResponse.ok) {
+      throw new Error(`Credentials test failed! status: ${testResponse.status}, body: ${testResponseText}`);
+    }
+    
+    console.log("Credentials test passed. Proceeding with tweet...");
+    
+    // Now send the actual tweet
     const response = await fetch(url, {
       method: method,
       headers: {
@@ -262,19 +297,34 @@ async function sendTweet(tweetText: string): Promise<any> {
     });
 
     const responseText = await response.text();
-    console.log("Response Status:", response.status);
-    console.log("Response Body:", responseText);
+    console.log("Tweet Response Status:", response.status);
+    console.log("Tweet Response Body:", responseText);
 
     if (!response.ok) {
       // Specific handling for 403 Forbidden errors
       if (response.status === 403) {
-        const errorDetail = {
-          status: response.status,
-          statusText: response.statusText,
-          body: responseText,
-          solution: "This is likely a permissions issue. Make sure your Twitter Developer App has WRITE permissions enabled. Go to the Twitter Developer Portal, find your app, go to 'User authentication settings' and ensure 'Read and write' permissions are selected."
-        };
-        throw new Error(`Forbidden: You don't have permission to post tweets. ${JSON.stringify(errorDetail)}`);
+        try {
+          const errorBody = JSON.parse(responseText);
+          const errorDetail = {
+            status: response.status,
+            statusText: response.statusText,
+            body: responseText,
+            detail: errorBody.detail,
+            title: errorBody.title,
+            message: "This error indicates your access tokens don't have write permissions.",
+            solution: "You need to regenerate your Twitter access tokens after enabling 'Read and write' permissions. Go to the Twitter Developer Portal, find your app's 'Keys and tokens' tab, and regenerate your 'Access Token and Secret'. Then update TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings."
+          };
+          console.error("Detailed 403 error:", JSON.stringify(errorDetail, null, 2));
+          throw new Error(`403 Forbidden: ${errorBody.detail || "You don't have permission to post tweets"}. ${JSON.stringify(errorDetail)}`);
+        } catch (parseError) {
+          const errorDetail = {
+            status: response.status,
+            statusText: response.statusText,
+            body: responseText,
+            solution: "This is likely a permissions issue. Make sure your Twitter Developer App has WRITE permissions enabled. Go to the Twitter Developer Portal, find your app, go to 'User authentication settings' and ensure 'Read and write' permissions are selected, then regenerate your access tokens."
+          };
+          throw new Error(`Forbidden: You don't have permission to post tweets. ${JSON.stringify(errorDetail)}`);
+        }
       }
       
       throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
@@ -475,8 +525,9 @@ serve(async (req) => {
       }
       
       try {
-        const randomSuffix = Math.random().toString(36).substring(2, 6);
-        const uniqueTweetText = `${tweetText} #${randomSuffix}`;
+        // Generate a shorter unique tag for the tweet to avoid Twitter duplicate content error
+        const randomSuffix = Math.random().toString(36).substring(2, 5);
+        const uniqueTweetText = `${tweetText} #t${randomSuffix}`;
         
         const tweet = await sendTweet(uniqueTweetText);
         return new Response(JSON.stringify(tweet), {
@@ -486,15 +537,22 @@ serve(async (req) => {
         console.error("Tweet error details:", error);
         
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        // Return a more detailed error response
-        return new Response(JSON.stringify({ 
+        let status = 500;
+        let responseBody: any = { 
+          success: false,
           error: "Failed to post tweet", 
-          details: errorMessage,
-          instructions: error instanceof Error && error.message.includes("Forbidden") ? 
-            "Please update your Twitter Developer App to have 'Read and write' permissions in the 'User authentication settings' section of the Twitter Developer Portal." : 
-            "Please check your Twitter API credentials"
-        }), {
-          status: 500,
+          details: errorMessage
+        };
+        
+        // Check if this is a permissions issue
+        if (errorMessage.includes("Forbidden") || errorMessage.includes("403")) {
+          status = 403;
+          responseBody.instructions = "After updating permissions in the Twitter Developer Portal to 'Read and write', you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings.";
+          responseBody.tokenInfo = "The original access tokens retain their original permission level, even after updating the app permissions. You must generate new tokens after changing permissions.";
+        }
+        
+        return new Response(JSON.stringify(responseBody), {
+          status: status,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
