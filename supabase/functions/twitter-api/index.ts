@@ -91,6 +91,35 @@ serve(async (req) => {
       }
     }
 
+    // Handle auth initialization endpoint
+    if (path === '/auth') {
+      console.log('[TWITTER-API] Initializing Twitter authentication');
+      try {
+        const { data, error } = await supabaseClient.functions.invoke(
+          'twitter-integration',
+          {
+            method: 'POST',
+            body: { 
+              endpoint: 'auth'
+            }
+          }
+        );
+
+        if (error) {
+          console.error('[TWITTER-API] Error calling twitter-integration auth endpoint:', error);
+          throw new Error(`Failed to initialize Twitter authentication: ${error.message}`);
+        }
+
+        console.log('[TWITTER-API] Twitter auth initialization result:', data);
+        return new Response(JSON.stringify(data), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (error) {
+        console.error('[TWITTER-API] Unexpected error during auth initialization:', error);
+        throw error;
+      }
+    }
+
     // Call the twitter-integration function based on the path
     if (path === '/tweet') {
       // For tweet endpoint, forward the request to the twitter-integration function

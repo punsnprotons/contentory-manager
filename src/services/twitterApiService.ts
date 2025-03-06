@@ -956,6 +956,8 @@ export class TwitterApiService {
   async initiateAuth(): Promise<string> {
     try {
       console.log("TwitterApiService: Initiating Twitter OAuth flow");
+      
+      // Make the request to the twitter-integration function's auth endpoint
       const response = await supabase.functions.invoke('twitter-integration', {
         method: 'POST',
         body: { endpoint: 'auth' }
@@ -963,9 +965,15 @@ export class TwitterApiService {
       
       console.log("TwitterApiService: Auth response:", response);
       
-      if (response.error || !response.data?.success || !response.data?.authURL) {
-        console.error("TwitterApiService: Error initiating auth:", response.error || 'Failed to get auth URL');
-        throw new Error(response.error?.message || 'Failed to initialize Twitter authentication');
+      if (response.error) {
+        console.error("TwitterApiService: Error from edge function:", response.error);
+        throw new Error(response.error.message || 'Failed to initialize Twitter authentication');
+      }
+      
+      // Check if we have a successful response with an auth URL
+      if (!response.data?.success || !response.data?.authURL) {
+        console.error("TwitterApiService: Invalid response format:", response.data);
+        throw new Error('Failed to get auth URL');
       }
       
       // Set up a message listener to handle the callback from the popup window
@@ -1088,8 +1096,12 @@ export class TwitterApiService {
       console.log("TwitterApiService: Received successful auth callback:", event.data);
       
       try {
-        // Get user profile data from Twitter API
-        let twitterUsername = 'twitter_user'; // Default value
+        // This was updated to match the expected structure from the edge function
+        const token = event.data.data.token || '';
+        const verifier = event.data.data.verifier || '';
+        
+        // Default to a simple username if we don't get one
+        let twitterUsername = 'twitter_user';
         
         try {
           // Try to get the actual username if possible
@@ -1114,8 +1126,8 @@ export class TwitterApiService {
             platform: 'twitter',
             connected: true,
             username: twitterUsername,
-            access_token: event.data.data.token,
-            refresh_token: event.data.data.verifier, // Store the verifier as refresh_token
+            access_token: token,
+            refresh_token: verifier,
             updated_at: new Date().toISOString()
           });
           
@@ -1125,24 +1137,13 @@ export class TwitterApiService {
         } else {
           console.log("TwitterApiService: Successfully stored Twitter connection");
           
-          // Forward the auth success message back to the opener
-          window.opener?.postMessage({ type: "TWITTER_AUTH_SUCCESS", data: event.data.data }, "*");
-          
-          // Also post to current window in case opener doesn't exist
-          window.postMessage({ type: "TWITTER_AUTH_SUCCESS", data: event.data.data }, "*");
-          
           // Add a parameter to the URL to indicate we came from auth flow
-          // This is cleaner than reloading the page and will help the Settings component
-          // know that it should refresh the connections
           window.location.href = "/settings?auth=success";
         }
       } catch (error) {
         console.error("TwitterApiService: Error handling auth success:", error);
         toast.error("Failed to complete Twitter authentication");
       }
-      
-      // Remove the listener since we're done with it
-      window.removeEventListener('message', this.handleAuthMessage);
     }
   };
 
