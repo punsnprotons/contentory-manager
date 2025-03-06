@@ -103,10 +103,10 @@ function generateOAuthHeader(
   // Add signature to OAuth parameters
   oauthParams.oauth_signature = signature;
   
-  // Build authorization header string - FIX: use k variable from loop instead of hardcoded 'k'
+  // Build authorization header string - using key in map function instead of hardcoded 'k'
   const authHeader = 'OAuth ' + Object.keys(oauthParams)
     .sort()
-    .map(k => `${encodeURIComponent(k)}="${encodeURIComponent(oauthParams[k])}"`)
+    .map(key => `${encodeURIComponent(key)}="${encodeURIComponent(oauthParams[key])}"`)
     .join(', ');
     
   console.log("Full OAuth Header:", authHeader);
@@ -119,8 +119,9 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
   const method = 'POST';
   
   // Create OAuth parameters including callback
+  const callbackURL = CALLBACK_URL;
   const oauthParams: Record<string, string> = {
-    oauth_callback: encodeURIComponent(CALLBACK_URL)
+    oauth_callback: callbackURL
   };
   
   // Generate authorization header
@@ -143,7 +144,7 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
     console.log("Response text:", responseText);
     
     if (!response.ok) {
-      throw new Error(`Error getting request token: ${response.status} ${response.statusText}`);
+      throw new Error(`Error getting request token: ${response.status} ${response.statusText} - ${responseText}`);
     }
     
     // Parse response parameters
@@ -242,6 +243,35 @@ async function sendTweet(tweetText: string): Promise<any> {
   return JSON.parse(responseText);
 }
 
+// Get user profile details with profile image and follower metrics
+async function getUserProfile() {
+  // The /users/me endpoint without field expansions doesn't include the data we need
+  // Let's use it with expanded fields
+  const url = `${BASE_URL}/users/me?user.fields=profile_image_url,description,public_metrics`;
+  const method = "GET";
+  const authHeader = generateOAuthHeader(method, url, {}, ACCESS_TOKEN, ACCESS_TOKEN_SECRET);
+  
+  console.log("Getting Twitter user profile with expanded fields");
+  
+  const response = await fetch(url, {
+    method: method,
+    headers: {
+      Authorization: authHeader,
+      "Content-Type": "application/json",
+    },
+  });
+  
+  const responseText = await response.text();
+  console.log("Response Status:", response.status);
+  console.log("Response Body:", responseText);
+  
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}, body: ${responseText}`);
+  }
+  
+  return JSON.parse(responseText);
+}
+
 // Verify Twitter credentials
 async function verifyCredentials(): Promise<any> {
   try {
@@ -317,7 +347,11 @@ serve(async (req) => {
         });
       }
       
-      const tweet = await sendTweet(tweetText);
+      // Add a random string to prevent duplicate tweet errors
+      const randomSuffix = Math.random().toString(36).substring(2, 6);
+      const uniqueTweetText = `${tweetText} #${randomSuffix}`;
+      
+      const tweet = await sendTweet(uniqueTweetText);
       return new Response(JSON.stringify(tweet), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -325,6 +359,12 @@ serve(async (req) => {
       // Get user profile
       const user = await getUser();
       return new Response(JSON.stringify(user), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } else if (endpoint === 'profile' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'profile') {
+      // Get detailed user profile
+      const profile = await getUserProfile();
+      return new Response(JSON.stringify(profile), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } else if (endpoint === 'auth' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'auth') {
@@ -340,6 +380,7 @@ serve(async (req) => {
           "/verify": "Verify Twitter credentials",
           "/tweet": "Send a tweet",
           "/user": "Get user profile",
+          "/profile": "Get detailed profile with follower metrics",
           "/auth": "Initiate OAuth flow"
         },
         message: "Twitter Integration API"

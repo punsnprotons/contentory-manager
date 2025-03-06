@@ -193,7 +193,8 @@ export class TwitterApiService {
         if (profileData.data.profile_image_url) {
           console.log(`TwitterApiService: Updating profile image URL: ${profileData.data.profile_image_url}`);
           
-          const { error: updateError } = await supabase
+          // First check if we need to update the connection using direct userId
+          let { error: updateError } = await supabase
             .from('platform_connections')
             .update({
               profile_image: profileData.data.profile_image_url,
@@ -203,7 +204,30 @@ export class TwitterApiService {
             .eq('platform', 'twitter');
             
           if (updateError) {
-            console.error('TwitterApiService: Error updating profile image:', updateError);
+            // If failed, try to use user lookup to find the real user ID
+            const { data: user, error: userError } = await supabase
+              .from('users')
+              .select('id')
+              .eq('auth_id', this.userId)
+              .single();
+            
+            if (user && !userError) {
+              // Try update again with user.id
+              const { error: retryUpdateError } = await supabase
+                .from('platform_connections')
+                .update({
+                  profile_image: profileData.data.profile_image_url,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('user_id', user.id)
+                .eq('platform', 'twitter');
+                
+              if (retryUpdateError) {
+                console.error('TwitterApiService: Error updating profile image with user.id:', retryUpdateError);
+              }
+            } else {
+              console.error('TwitterApiService: Error looking up user for platform connection update:', userError);
+            }
           }
         }
       }
