@@ -1,6 +1,6 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
+import { ContentType } from "@/types";
 
 /**
  * Twitter API Service for making authenticated Twitter API calls
@@ -281,7 +281,7 @@ export class TwitterApiService {
       // Store each tweet in the database
       for (const tweet of tweetsData.data) {
         // Determine media type and URL if present
-        let mediaType = 'text';
+        let mediaType: ContentType = 'text';
         let mediaUrl = null;
         
         if (tweet.attachments && tweet.attachments.media_keys && tweetsData.includes?.media) {
@@ -289,7 +289,7 @@ export class TwitterApiService {
           const media = tweetsData.includes.media.find(m => m.media_key === mediaKey);
           
           if (media) {
-            mediaType = media.type === 'photo' ? 'image' : media.type;
+            mediaType = media.type === 'photo' ? 'image' : (media.type === 'video' ? 'video' : 'text');
             mediaUrl = media.url || media.preview_image_url;
           }
         }
@@ -298,14 +298,14 @@ export class TwitterApiService {
         const { data: contentData, error: contentError } = await supabase
           .from('content')
           .insert({
-            user_id: this.userId,
-            platform: 'twitter',
             type: mediaType,
+            platform: 'twitter',
             intent: 'news', // Default intent
             status: 'published',
             content: tweet.text,
             media_url: mediaUrl,
-            published_at: new Date(tweet.created_at).toISOString()
+            published_at: new Date(tweet.created_at).toISOString(),
+            user_id: this.userId
           })
           .select('id')
           .single();
