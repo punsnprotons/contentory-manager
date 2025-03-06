@@ -33,8 +33,8 @@ enabled = true
 
 [auth]
 enabled = true
-site_url = "https://fxzamjowvpnyuxthusib.supabase.co"
-additional_redirect_urls = ["https://localhost:3000", "https://fxzamjowvpnyuxthusib.supabase.co/functions/v1/twitter-integration/callback"]
+site_url = "https://fxzamjowvpnyuxthusib.vercel.app"
+additional_redirect_urls = ["https://fxzamjowvpnyuxthusib.vercel.app", "https://fxzamjowvpnyuxthusib.supabase.co/functions/v1/twitter-integration/callback"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10

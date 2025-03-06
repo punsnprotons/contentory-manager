@@ -481,10 +481,8 @@ export class TwitterApiService {
           console.log("TwitterApiService: Successfully stored Twitter connection");
           toast.success("Successfully connected to Twitter");
           
-          // Reload the profile data
-          this.fetchProfileData().catch(err => {
-            console.error("Error fetching profile data after connection:", err);
-          });
+          // Force page reload to reflect the new connection state
+          window.location.reload();
         }
       } catch (error) {
         console.error("TwitterApiService: Error handling auth success:", error);

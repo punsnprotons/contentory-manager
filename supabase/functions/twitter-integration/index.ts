@@ -1,3 +1,4 @@
+
 import { createHmac } from "node:crypto";
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
@@ -416,15 +417,23 @@ serve(async (req) => {
       console.log("Handling Twitter callback");
       const result = await handleCallback(url);
       
-      // Extract the origin from the referer or set a default
-      const referer = req.headers.get('referer') || '';
-      const origin = referer ? new URL(referer).origin : 'https://fxzamjowvpnyuxthusib.vercel.app';
-      
-      console.log("Using origin for redirect:", origin);
-      
-      // Redirect back to the application with success - using dynamic origin
+      // Return HTML that will post a message to the opener window and then close itself
       return new Response(
-        `<html><body><script>window.opener.postMessage({type: "TWITTER_AUTH_SUCCESS", data: ${JSON.stringify(result)}}, "*"); window.close();</script></body></html>`,
+        `<html><body>
+          <script>
+            // Post message to the parent window that opened this window
+            if (window.opener) {
+              window.opener.postMessage({type: "TWITTER_AUTH_SUCCESS", data: ${JSON.stringify(result)}}, "*");
+              console.log("Posted authentication success message to opener");
+              // Close the popup window after posting the message
+              window.close();
+            } else {
+              // If window.opener is not available, redirect to the main application
+              window.location.href = "https://fxzamjowvpnyuxthusib.vercel.app";
+            }
+          </script>
+          <p>Authentication successful. You can close this window and return to the application.</p>
+        </body></html>`,
         { 
           headers: { 
             ...corsHeaders,
