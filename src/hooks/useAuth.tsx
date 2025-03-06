@@ -1,4 +1,3 @@
-
 import { useState, useEffect, createContext, useContext } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,14 +27,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       console.log("Auth state changed:", _event, session?.user?.email);
       setSession(session);
@@ -64,14 +61,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signUp = async (email: string, password: string) => {
     try {
-      // First, sign up the user
       const { data, error } = await supabase.auth.signUp({ 
         email, 
-        password,
-        options: {
-          // Note: this doesn't actually auto-confirm the email as that's a server-side setting
-          emailRedirectTo: window.location.origin + '/auth',
-        }
+        password
       });
       
       if (error) {
@@ -83,30 +75,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return { error, data: null };
       }
       
-      // After successful registration, try to sign in
       const { error: signInError } = await supabase.auth.signInWithPassword({ 
         email, 
         password 
       });
       
       if (signInError) {
-        // If the sign-in fails with email_not_confirmed, show a more helpful message
-        if (signInError.message.includes("Email not confirmed")) {
-          toast({
-            title: "Account created successfully",
-            description: "Please check your email for a confirmation link before logging in.",
-          });
-          // Navigate to login page
-          navigate('/auth');
-        } else {
-          toast({
-            title: "Sign in failed after registration",
-            description: signInError.message,
-            variant: "destructive",
-          });
-        }
+        toast({
+          title: "Sign in failed after registration",
+          description: signInError.message,
+          variant: "destructive",
+        });
       } else {
-        // If sign-in is successful
         toast({
           title: "Success",
           description: "Account created and logged in successfully",

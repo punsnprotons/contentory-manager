@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,7 +9,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
 import { Navigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 
 const Auth: React.FC = () => {
   const { user, signIn, signUp, loading } = useAuth();
@@ -167,7 +167,7 @@ const Auth: React.FC = () => {
                 <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-md border border-green-100 dark:border-green-900">
                   <h3 className="font-medium text-green-800 dark:text-green-300">Registration successful!</h3>
                   <p className="text-sm text-green-700 dark:text-green-400 mt-1">
-                    Please check your email for a confirmation link before logging in.
+                    You can now access your account and start creating content.
                   </p>
                 </div>
                 <Button 
