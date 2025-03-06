@@ -10,130 +10,72 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { TwitterApiService } from '@/services/twitterApiService';
 import { toast } from 'sonner';
-import { PlusCircle, Twitter, Instagram, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { PlusCircle, Twitter, Instagram, CheckCircle, AlertCircle } from 'lucide-react';
 
 const Settings = () => {
   const [loading, setLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [notifications, setNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
-  const [connections, setConnections] = useState<{platform: string, connected: boolean, username?: string}[]>([
-    { platform: 'twitter', connected: false },
-    { platform: 'instagram', connected: false }
-  ]);
-  const [pageError, setPageError] = useState<string | null>(null);
-  const { session, user, loading: authLoading } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
+  const [connections, setConnections] = useState<{platform: string, connected: boolean, username?: string}[]>([]);
+  const { session } = useAuth();
   
-  console.log("Settings component rendering:", { session, user, authLoading });
-  
-  // Load settings when component mounts or auth state changes
   useEffect(() => {
-    console.log("Settings component mounted, auth status:", { session, authLoading, user });
-    
-    // Only load data if we have a session and are not in loading state
-    if (!authLoading && session?.user) {
-      try {
-        loadUserSettings();
-        loadConnections();
-        
-        // Check for OAuth callback params
-        const params = new URLSearchParams(location.search);
-        const oauthToken = params.get('oauth_token');
-        const oauthVerifier = params.get('oauth_verifier');
-        
-        if (oauthToken && oauthVerifier) {
-          console.log("Found OAuth params, processing Twitter callback:", { oauthToken, oauthVerifier });
-          navigate('/settings', { replace: true });
-          handleTwitterCallback(oauthToken, oauthVerifier);
-        }
-      } catch (error) {
-        console.error("Error in Settings useEffect:", error);
-        setPageError("An error occurred while loading settings. Please try refreshing the page.");
-      }
+    if (session?.user) {
+      loadUserSettings();
+      loadConnections();
     }
-  }, [session, authLoading, location]);
+  }, [session]);
 
   const loadUserSettings = async () => {
     try {
-      console.log("Loading user settings for user:", session?.user.id);
       const { data, error } = await supabase
         .from('user_settings')
         .select('*')
         .eq('user_id', session?.user.id)
-        .maybeSingle();
+        .single();
         
-      if (error) {
-        console.error('Error loading user settings:', error);
-        // Don't throw error, just continue with defaults
-        return;
-      }
+      if (error) throw error;
       
       if (data) {
-        console.log("User settings loaded:", data);
-        setNotifications(data.enable_notifications ?? true);
+        setNotifications(data.enable_notifications);
         setDarkMode(data.theme === 'dark');
       }
     } catch (error) {
-      console.error('Exception in loadUserSettings:', error);
-      // Don't set page error, just use defaults
+      console.error('Error loading user settings:', error);
     }
   };
   
   const loadConnections = async () => {
     try {
-      console.log("Loading platform connections for user:", session?.user.id);
-      
-      // Safety check for session user
-      if (!session?.user?.id) {
-        console.warn("No user ID found in session, using default connections");
-        return;
-      }
-      
       const { data, error } = await supabase
         .from('platform_connections')
         .select('platform, connected, username')
-        .eq('user_id', session.user.id);
+        .eq('user_id', session?.user.id);
         
-      if (error) {
-        console.error('Error loading connections:', error);
-        // Don't throw, continue with defaults
-        return;
-      }
+      if (error) throw error;
       
       if (data && data.length > 0) {
-        console.log("Platform connections loaded:", data);
-        setConnections(prevConnections => {
-          // Merge loaded data with defaults to ensure we have all platforms
-          const platformMap = new Map(data.map(conn => [conn.platform, conn]));
-          
-          return prevConnections.map(conn => {
-            const loadedConn = platformMap.get(conn.platform);
-            return loadedConn ? loadedConn : conn;
-          });
-        });
+        setConnections(data);
       } else {
-        console.log("No platform connections found, using defaults");
+        // Default connections if none found
+        setConnections([
+          { platform: 'twitter', connected: false },
+          { platform: 'instagram', connected: false }
+        ]);
       }
     } catch (error) {
-      console.error('Exception in loadConnections:', error);
-      // Don't set page error, just use defaults
+      console.error('Error loading connections:', error);
     }
   };
   
   const saveSettings = async () => {
     setLoading(true);
     try {
-      if (!session?.user?.id) {
-        throw new Error('User is not logged in');
-      }
-      
       const { error } = await supabase
         .from('user_settings')
         .upsert({
-          user_id: session.user.id,
+          user_id: session?.user.id,
           enable_notifications: notifications,
           theme: darkMode ? 'dark' : 'light'
         });
@@ -157,57 +99,15 @@ const Settings = () => {
     
     setLoading(true);
     try {
-      console.log('Initiating Twitter authentication...');
       const twitterService = new TwitterApiService(session.user.id);
-      
       const authURL = await twitterService.initiateAuth();
-      console.log('Generated Twitter auth URL:', authURL);
       
-      if (!authURL) {
-        throw new Error('Failed to generate Twitter authentication URL');
-      }
-      
-      window.location.href = authURL;
-      toast.info('Redirecting to Twitter for authentication...');
+      // Open Twitter auth in a new window
+      window.open(authURL, '_blank', 'width=600,height=600');
+      toast.info('Please complete authentication in the opened window');
     } catch (error) {
       console.error('Error connecting Twitter:', error);
-      toast.error('Failed to connect Twitter: ' + (error instanceof Error ? error.message : 'Unknown error'));
-      setLoading(false);
-    }
-  };
-  
-  const handleTwitterCallback = async (oauthToken: string, oauthVerifier: string) => {
-    if (!session?.user) {
-      toast.error('You must be logged in to complete Twitter authentication');
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      console.log('Processing Twitter callback...');
-      toast.info('Processing Twitter authentication...');
-      
-      const username = "twitter_user";
-      
-      const { error } = await supabase.from('platform_connections').upsert({
-        user_id: session.user.id,
-        platform: "twitter" as "twitter" | "instagram",
-        access_token: ACCESS_TOKEN_PLACEHOLDER,
-        refresh_token: ACCESS_TOKEN_SECRET_PLACEHOLDER, 
-        username: username,
-        connected: true,
-        updated_at: new Date().toISOString()
-      });
-      
-      if (error) {
-        throw error;
-      }
-      
-      toast.success('Twitter account connected successfully!');
-      loadConnections();
-    } catch (error) {
-      console.error('Error processing Twitter callback:', error);
-      toast.error('Failed to complete Twitter authentication');
+      toast.error('Failed to connect Twitter');
     } finally {
       setLoading(false);
     }
@@ -221,9 +121,14 @@ const Settings = () => {
     
     setImportLoading(true);
     try {
-      toast.info('Starting Twitter import...');
-      const twitterService = new TwitterApiService(session.user.id);
+      // Create and initialize Twitter service
+      const twitterService = await TwitterApiService.create(session);
       
+      if (!twitterService) {
+        throw new Error('Could not initialize Twitter service');
+      }
+      
+      // Fetch and store tweets
       const result = await twitterService.fetchUserTweets(50);
       
       if (result && Array.isArray(result)) {
@@ -232,6 +137,7 @@ const Settings = () => {
         toast.success('Twitter import completed');
       }
       
+      // Refresh connections to show updated status
       loadConnections();
     } catch (error) {
       console.error('Error importing tweets:', error);
@@ -241,56 +147,6 @@ const Settings = () => {
     }
   };
 
-  const ACCESS_TOKEN_PLACEHOLDER = "placeholder_access_token";
-  const ACCESS_TOKEN_SECRET_PLACEHOLDER = "placeholder_access_token_secret";
-
-  console.log("Rendering settings with auth state:", { authLoading, loggedIn: !!session?.user, session, pageError });
-
-  // Show loading state
-  if (authLoading) {
-    return (
-      <div className="container mx-auto py-6 flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-      </div>
-    );
-  }
-  
-  // Show login prompt if not logged in
-  if (!session?.user && !authLoading) {
-    return (
-      <div className="container mx-auto py-6 space-y-8">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        </div>
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <p className="text-lg text-center mb-4">You need to be logged in to access settings.</p>
-            <Button onClick={() => navigate('/auth')}>Go to Login</Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-  
-  // Show error state
-  if (pageError) {
-    return (
-      <div className="container mx-auto py-6 space-y-8">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        </div>
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <AlertCircle className="h-12 w-12 text-destructive mb-4" />
-            <p className="text-lg text-center text-destructive mb-4">{pageError}</p>
-            <Button onClick={() => window.location.reload()}>Refresh Page</Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Main content - only render if we have a session and are not loading
   return (
     <div className="container mx-auto py-6 space-y-8">
       <div className="flex justify-between items-center">
@@ -327,12 +183,7 @@ const Settings = () => {
               
               <div className="pt-4">
                 <Button onClick={saveSettings} disabled={loading}>
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : 'Save Settings'}
+                  {loading ? 'Saving...' : 'Save Settings'}
                 </Button>
               </div>
             </CardContent>
@@ -375,12 +226,7 @@ const Settings = () => {
                             onClick={importTwitterTweets}
                             disabled={importLoading || connection.platform !== 'twitter'}
                           >
-                            {importLoading ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Importing...
-                              </>
-                            ) : 'Import Posts'}
+                            {importLoading ? 'Importing...' : 'Import Posts'}
                           </Button>
                           <CheckCircle className="h-5 w-5 text-green-500" />
                         </>
@@ -391,11 +237,7 @@ const Settings = () => {
                           onClick={connection.platform === 'twitter' ? connectTwitter : undefined}
                           disabled={loading || connection.platform !== 'twitter'}
                         >
-                          {loading && connection.platform === 'twitter' ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <PlusCircle className="h-4 w-4 mr-2" />
-                          )}
+                          <PlusCircle className="h-4 w-4 mr-2" />
                           Connect
                         </Button>
                       )}
@@ -430,12 +272,7 @@ const Settings = () => {
               
               <div className="pt-4">
                 <Button onClick={saveSettings} disabled={loading}>
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : 'Save Settings'}
+                  {loading ? 'Saving...' : 'Save Settings'}
                 </Button>
               </div>
             </CardContent>

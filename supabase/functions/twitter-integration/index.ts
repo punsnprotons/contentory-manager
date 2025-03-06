@@ -6,9 +6,7 @@ const API_KEY = Deno.env.get("TWITTER_API_KEY")?.trim();
 const API_SECRET = Deno.env.get("TWITTER_API_SECRET")?.trim();
 const ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
 const ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")?.trim();
-
-// Read CALLBACK_URL from environment variable or use a fallback with app URL
-const TWITTER_CALLBACK_URL = Deno.env.get("TWITTER_CALLBACK_URL") || "https://fxzamjowvpnyuxthusib.supabase.co/auth/v1/callback";
+const CALLBACK_URL = "https://fxzamjowvpnyuxthusib.supabase.co/auth/v1/callback";
 
 // CORS headers for browser requests
 const corsHeaders = {
@@ -30,7 +28,7 @@ function validateEnvironmentVariables() {
   }
   
   console.log("All Twitter API credentials are present");
-  console.log("Using callback URL:", TWITTER_CALLBACK_URL);
+  console.log("Using callback URL:", CALLBACK_URL);
 }
 
 // Generate OAuth 1.0a signature
@@ -104,7 +102,7 @@ function generateOAuthHeader(
   // Add signature to OAuth parameters
   oauthParams.oauth_signature = signature;
   
-  // Build authorization header string
+  // Build authorization header string - using key in map function instead of hardcoded 'k'
   const authHeader = 'OAuth ' + Object.keys(oauthParams)
     .sort()
     .map(key => `${encodeURIComponent(key)}="${encodeURIComponent(oauthParams[key])}"`)
@@ -115,14 +113,15 @@ function generateOAuthHeader(
 }
 
 // Request a temporary token from Twitter
-async function getRequestToken(callbackUrl: string): Promise<{ oauth_token: string, oauth_token_secret: string }> {
+async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_secret: string }> {
   // Use the v1.1 OAuth endpoints which are still operational
   const requestTokenURL = 'https://api.twitter.com/oauth/request_token';
   const method = 'POST';
   
-  // Critical fix: do not encode the callback URL as it will be encoded as part of the OAuth process
+  // Important: The callback URL must be included in the OAuth parameters
+  // but not in the body of the request
   const oauthParams: Record<string, string> = {
-    oauth_callback: callbackUrl
+    oauth_callback: CALLBACK_URL
   };
   
   // Generate authorization header
@@ -130,7 +129,7 @@ async function getRequestToken(callbackUrl: string): Promise<{ oauth_token: stri
   
   console.log("Requesting token with header:", authHeader);
   console.log("Request URL:", requestTokenURL);
-  console.log("Using callback URL:", callbackUrl);
+  console.log("Using callback URL:", CALLBACK_URL);
   
   try {
     const response = await fetch(requestTokenURL, {
@@ -173,9 +172,9 @@ async function getRequestToken(callbackUrl: string): Promise<{ oauth_token: stri
 }
 
 // Generate authentication URL
-async function generateTwitterAuthURL(callbackUrl: string): Promise<string> {
+async function generateTwitterAuthURL(): Promise<string> {
   try {
-    const { oauth_token } = await getRequestToken(callbackUrl);
+    const { oauth_token } = await getRequestToken();
     
     // Using the authorize endpoint which requires explicit user approval each time
     const authURL = `https://api.twitter.com/oauth/authorize?oauth_token=${oauth_token}`;
@@ -359,13 +358,10 @@ async function verifyCredentials(): Promise<any> {
   }
 }
 
-// Initiate OAuth authentication flow with a specific callback URL
-async function initiateOAuth(callbackUrl: string): Promise<any> {
+// Initiate OAuth authentication flow
+async function initiateOAuth(): Promise<any> {
   try {
-    // Critical fix: Do not modify or encode the callback URL - use exactly as specified in Twitter Developer Portal
-    console.log(`Initiating OAuth with callback URL: ${callbackUrl}`);
-    
-    const authURL = await generateTwitterAuthURL(callbackUrl);
+    const authURL = await generateTwitterAuthURL();
     return {
       success: true,
       authURL,
@@ -447,11 +443,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } else if (endpoint === 'auth' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'auth') {
-      // Use callback URL from environment variable
-      const callbackUrl = TWITTER_CALLBACK_URL;
-      console.log(`Using callback URL from environment: ${callbackUrl}`);
-      
-      const result = await initiateOAuth(callbackUrl);
+      // Initiate OAuth flow
+      const result = await initiateOAuth();
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
