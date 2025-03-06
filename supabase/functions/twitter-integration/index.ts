@@ -115,6 +115,7 @@ function generateOAuthHeader(
 
 // Request a temporary token from Twitter
 async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_secret: string }> {
+  // Use the v1.1 OAuth endpoints which are still operational
   const requestTokenURL = 'https://api.twitter.com/oauth/request_token';
   const method = 'POST';
   
@@ -175,7 +176,9 @@ async function getRequestToken(): Promise<{ oauth_token: string, oauth_token_sec
 async function generateTwitterAuthURL(): Promise<string> {
   try {
     const { oauth_token } = await getRequestToken();
-    const authURL = `https://api.twitter.com/oauth/authenticate?oauth_token=${oauth_token}`;
+    // Updated to use the proper authentication URL
+    // This is the correct authentication URL that should work
+    const authURL = `https://api.twitter.com/oauth/authorize?oauth_token=${oauth_token}`;
     console.log("Generated Auth URL:", authURL);
     return authURL;
   } catch (error) {
@@ -184,7 +187,7 @@ async function generateTwitterAuthURL(): Promise<string> {
   }
 }
 
-// Twitter API v2 base URL
+// Twitter API v2 base URL - updated to use api.twitter.com which still works for many endpoints
 const BASE_URL = "https://api.twitter.com/2";
 
 // Get current user profile
