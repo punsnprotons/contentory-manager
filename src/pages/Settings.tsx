@@ -256,13 +256,13 @@ const Settings: React.FC = () => {
     setIsVerifyingTwitter(true);
     try {
       const response = await supabase.functions.invoke('twitter-integration', {
-        method: 'GET',
+        method: 'POST',
         body: { endpoint: 'verify' }
       });
       
       const result = response.data as TwitterVerificationResult;
       
-      if (result.verified && result.user) {
+      if (result && result.verified && result.user) {
         const { error } = await supabase
           .from('platform_connections')
           .upsert({
@@ -298,7 +298,7 @@ const Settings: React.FC = () => {
       } else {
         toast({
           title: "Verification Failed",
-          description: result.message || "Could not verify Twitter credentials",
+          description: result?.message || "Could not verify Twitter credentials",
           variant: "destructive"
         });
       }
@@ -318,7 +318,7 @@ const Settings: React.FC = () => {
     setIsConnectingTwitter(true);
     try {
       const response = await supabase.functions.invoke('twitter-integration', {
-        method: 'GET',
+        method: 'POST',
         body: { endpoint: 'auth' }
       });
       
@@ -347,7 +347,7 @@ const Settings: React.FC = () => {
     try {
       const { data, error } = await supabase.functions.invoke('twitter-integration', {
         method: 'POST',
-        body: { text: "This is a test tweet from Wubble AI!" }
+        body: { endpoint: 'tweet', text: "This is a test tweet from Wubble AI!" }
       });
       
       if (error) {

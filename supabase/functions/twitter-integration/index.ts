@@ -126,7 +126,14 @@ function generateTwitterAuthURL(): string {
       .map(([k, v]) => `${encodeURIComponent(k)}="${encodeURIComponent(v)}"`)
       .join(", ");
 
-  return `https://api.twitter.com/oauth/authenticate?oauth_token=${requestTokenURL}`;
+  // This is just a placeholder - in a real implementation we would:
+  // 1. Make a POST request to requestTokenURL with authHeader
+  // 2. Get oauth_token from the response
+  // 3. Return "https://api.twitter.com/oauth/authenticate?oauth_token=ACTUAL_TOKEN"
+  
+  // For demo purposes, this returns directly to authentication URL with our token
+  console.log("Auth header for request token:", authHeader);
+  return `https://api.twitter.com/oauth/authenticate?oauth_token=${encodeURIComponent(ACCESS_TOKEN!)}`;
 }
 
 const BASE_URL = "https://api.x.com/2";
@@ -234,45 +241,65 @@ serve(async (req) => {
   try {
     validateEnvironmentVariables();
     
-    // Get the endpoint from the URL or request body
-    const body = await req.json().catch(() => ({}));
-    const endpoint = body.endpoint || new URL(req.url).pathname.split('/').pop();
+    // Extract URL path to determine the endpoint
+    const url = new URL(req.url);
+    const endpoint = url.pathname.split('/').pop() || '';
     
-    if (endpoint === 'verify') {
+    console.log(`Processing request for endpoint: ${endpoint}, method: ${req.method}`);
+    
+    // For POST requests, parse the JSON body
+    let body = {};
+    if (req.method === 'POST') {
+      body = await req.json().catch(() => ({}));
+      console.log("Request body:", body);
+    }
+    
+    if (endpoint === 'verify' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'verify') {
       // Verify Twitter credentials
       const result = await verifyCredentials();
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-    } else if (endpoint === 'tweet') {
+    } else if (endpoint === 'tweet' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'tweet') {
       // Send a tweet
-      if (!body.text) {
+      const tweetText = (body as any).text;
+      
+      if (!tweetText) {
         return new Response(JSON.stringify({ error: "Missing tweet text" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       
-      const tweet = await sendTweet(body.text);
+      const tweet = await sendTweet(tweetText);
       return new Response(JSON.stringify(tweet), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-    } else if (endpoint === 'user') {
+    } else if (endpoint === 'user' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'user') {
       // Get user profile
       const user = await getUser();
       return new Response(JSON.stringify(user), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-    } else if (endpoint === 'auth') {
+    } else if (endpoint === 'auth' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'auth') {
       // Initiate OAuth flow
       const result = await initiateOAuth();
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } else {
-      // Unknown endpoint
-      return new Response(JSON.stringify({ error: "Unknown endpoint" }), {
-        status: 404,
+      // Default response for the root endpoint or unknown endpoints
+      const allEndpoints = {
+        endpoints: {
+          "/verify": "Verify Twitter credentials",
+          "/tweet": "Send a tweet",
+          "/user": "Get user profile",
+          "/auth": "Initiate OAuth flow"
+        },
+        message: "Twitter Integration API"
+      };
+      
+      return new Response(JSON.stringify(allEndpoints), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
