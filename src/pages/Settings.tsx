@@ -224,24 +224,24 @@ const Settings = () => {
     
     setLoading(true);
     try {
-      console.log("Settings: Connecting Twitter");
+      console.log("Settings: Connecting Twitter with OAuth 1.0a");
       const twitterService = new TwitterApiService(session.user.id);
       toast.info('Setting up Twitter authentication...');
       
       try {
-        const authURL = await twitterService.initiateAuth();
+        const verificationResult = await twitterService.verifyCredentials();
         
-        console.log("Settings: Opening Twitter auth URL:", authURL);
-        const authWindow = window.open(authURL, '_blank', 'width=600,height=600');
-        
-        if (!authWindow) {
-          console.error("Settings: Failed to open Twitter auth window");
-          throw new Error("Failed to open popup window. Please disable popup blockers and try again.");
+        if (verificationResult) {
+          toast.success('Successfully connected to Twitter!');
+          
+          await twitterService.fetchProfileData();
+          
+          await loadConnections();
+        } else {
+          toast.error('Failed to connect Twitter. Please check your API credentials.');
         }
-        
-        toast.info('Please complete authentication in the opened window');
       } catch (authError) {
-        console.error('Error getting Twitter auth URL:', authError);
+        console.error('Error connecting Twitter:', authError);
         const errorMessage = authError instanceof Error ? authError.message : 'Failed to connect Twitter';
         
         if (errorMessage.includes('rate limit') || errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {

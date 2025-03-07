@@ -1,4 +1,3 @@
-
 // Import necessary modules
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -213,13 +212,13 @@ export class TwitterApiService {
   }
   
   /**
-   * Initiate Twitter authentication flow with OAuth 2.0
+   * Initiate Twitter authentication flow with OAuth 1.0a
    */
   async initiateAuth(retryCount = 0): Promise<string> {
     const endpoint = 'auth';
     
     try {
-      console.log('TwitterApiService: Initiating Twitter OAuth 2.0 auth');
+      console.log('TwitterApiService: Initiating Twitter OAuth 1.0a auth');
       
       // Check for cached auth URL
       const cachedResponse = TwitterApiService.getCachedResponse(endpoint);
@@ -248,7 +247,7 @@ export class TwitterApiService {
         },
         body: { 
           endpoint: 'auth',
-          oauth2: true, // Signal that we're using OAuth 2.0
+          oauth1: true, // Signal that we're using OAuth 1.0a
           timestamp: Date.now() // Add timestamp to avoid caching
         }
       });
@@ -305,11 +304,11 @@ export class TwitterApiService {
   }
   
   /**
-   * Verify Twitter credentials using OAuth 2.0
+   * Verify Twitter credentials using OAuth 1.0a
    */
   async verifyCredentials(): Promise<boolean> {
     try {
-      console.log('TwitterApiService: Verifying Twitter credentials with OAuth 2.0');
+      console.log('TwitterApiService: Verifying Twitter credentials with OAuth 1.0a');
       
       const { data, error } = await supabase.functions.invoke('twitter-api', {
         method: 'POST',
@@ -317,7 +316,7 @@ export class TwitterApiService {
           'path': '/verify-credentials'
         },
         body: { 
-          oauth2: true,
+          oauth1: true,
           timestamp: Date.now() 
         }
       });
@@ -339,7 +338,7 @@ export class TwitterApiService {
         return false;
       }
       
-      console.log('TwitterApiService: OAuth 2.0 credentials verified successfully');
+      console.log('TwitterApiService: OAuth 1.0a credentials verified successfully');
       return true;
     } catch (error) {
       console.error('TwitterApiService: Error verifying credentials:', error);
@@ -377,11 +376,11 @@ export class TwitterApiService {
   }
   
   /**
-   * Post a tweet using OAuth 2.0
+   * Post a tweet using OAuth 1.0a
    */
   async postTweet(content: string): Promise<any> {
     try {
-      console.log('TwitterApiService: Posting tweet using OAuth 2.0');
+      console.log('TwitterApiService: Posting tweet using OAuth 1.0a');
       
       const { data, error } = await supabase.functions.invoke('twitter-api', {
         method: 'POST',
@@ -390,7 +389,7 @@ export class TwitterApiService {
         },
         body: { 
           content,
-          oauth2: true 
+          oauth1: true // Signal that we're using OAuth 1.0a
         }
       });
       
@@ -408,11 +407,11 @@ export class TwitterApiService {
   }
   
   /**
-   * Fetch user tweets with OAuth 2.0
+   * Fetch user tweets with OAuth 1.0a
    */
   async fetchUserTweets(limit: number = 10): Promise<any> {
     try {
-      console.log('TwitterApiService: Fetching user tweets with OAuth 2.0');
+      console.log('TwitterApiService: Fetching user tweets with OAuth 1.0a');
       
       const { data, error } = await supabase.functions.invoke('twitter-api', {
         method: 'POST',
@@ -421,7 +420,7 @@ export class TwitterApiService {
         },
         body: { 
           limit,
-          oauth2: true
+          oauth1: true
         }
       });
       
@@ -439,11 +438,11 @@ export class TwitterApiService {
   }
   
   /**
-   * Fetch profile data with OAuth 2.0
+   * Fetch profile data with OAuth 1.0a
    */
   async fetchProfileData(): Promise<any> {
     try {
-      console.log('TwitterApiService: Fetching profile data with OAuth 2.0');
+      console.log('TwitterApiService: Fetching profile data with OAuth 1.0a');
       
       const { data, error } = await supabase.functions.invoke('twitter-api', {
         method: 'POST',
@@ -451,7 +450,7 @@ export class TwitterApiService {
           'path': '/verify-credentials'
         },
         body: { 
-          oauth2: true 
+          oauth1: true 
         }
       });
       
@@ -479,11 +478,11 @@ export class TwitterApiService {
   }
   
   /**
-   * Get the Twitter API limits with OAuth 2.0
+   * Get the Twitter API limits with OAuth 1.0a
    */
   async getTwitterPlatformLimits(): Promise<any> {
     try {
-      console.log('TwitterApiService: Fetching Twitter API limits with OAuth 2.0');
+      console.log('TwitterApiService: Fetching Twitter API limits with OAuth 1.0a');
       
       const { data, error } = await supabase.functions.invoke('twitter-api', {
         method: 'POST',
@@ -491,7 +490,7 @@ export class TwitterApiService {
           'path': '/rate-limit-status'
         },
         body: { 
-          oauth2: true,
+          oauth1: true,
           timestamp: Date.now() 
         }
       });
