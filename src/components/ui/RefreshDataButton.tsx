@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
@@ -30,19 +31,48 @@ export const checkTwitterConnection = async (): Promise<boolean> => {
       return false;
     }
     
-    // First check if we have a record in platform_connections
+    console.log('Checking Twitter connection for user:', user.id);
+    
+    // First make sure the user exists in the users table
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('auth_id', user.id)
+      .maybeSingle();
+      
+    if (userError && userError.code !== 'PGRST116') {
+      console.error('Error checking user:', userError);
+    }
+    
+    if (!userData && userError?.code === 'PGRST116') {
+      // User doesn't exist, create them
+      console.log('User not found in database, creating user record');
+      const { error: createError } = await supabase
+        .from('users')
+        .insert({
+          auth_id: user.id,
+          email: user.email
+        });
+        
+      if (createError) {
+        console.error('Error creating user:', createError);
+        return false;
+      } else {
+        console.log('User created successfully in database');
+      }
+    }
+    
+    // Check if we have a record in platform_connections
     const { data: connections, error: connectionsError } = await supabase
       .from('platform_connections')
       .select('connected, last_verified, username')
       .eq('user_id', user.id)
       .eq('platform', 'twitter')
-      .single();
+      .maybeSingle();
     
-    if (connectionsError) {
-      if (connectionsError.code === 'PGRST116') {
-        console.log('No Twitter connection found in database');
-        return false;
-      }
+    console.log('Platform connections query result:', connections, connectionsError);
+    
+    if (connectionsError && connectionsError.code !== 'PGRST116') {
       console.error('Error fetching Twitter connection:', connectionsError);
       return false;
     }
@@ -76,6 +106,8 @@ export const checkTwitterConnection = async (): Promise<boolean> => {
         path: '/verify',
       }
     });
+    
+    console.log('Twitter verification result:', verifyResult, verifyError);
     
     if (verifyError || !verifyResult?.verified) {
       console.error('Twitter connection verification failed:', verifyError || 'Not verified');
@@ -129,14 +161,15 @@ export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Pro
       };
     }
     
+    // First, make sure the user exists in the users table
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select('id')
       .eq('auth_id', user.id)
-      .single();
-    
-    if (userError || !userData) {
-      console.error('Error getting user data:', userError);
+      .maybeSingle();
+      
+    if (userError && userError.code !== 'PGRST116') {
+      console.error('Error checking user:', userError);
       toast.error('Failed to get user data');
       return {
         success: false,
@@ -144,9 +177,44 @@ export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Pro
       };
     }
     
+    if (!userData && userError?.code === 'PGRST116') {
+      // User doesn't exist, create them
+      console.log('User not found in database, creating user record');
+      const { data: newUser, error: createError } = await supabase
+        .from('users')
+        .insert({
+          auth_id: user.id,
+          email: user.email
+        })
+        .select('id')
+        .single();
+        
+      if (createError || !newUser) {
+        console.error('Error creating user:', createError);
+        toast.error('Failed to create user record');
+        return {
+          success: false,
+          message: 'Failed to create user record'
+        };
+      } else {
+        console.log('User created successfully:', newUser);
+      }
+    }
+    
+    // Now check if we have a valid Twitter connection
+    const isConnected = await checkTwitterConnection();
+    
+    if (!isConnected) {
+      toast.error('No active Twitter connection found. Please connect Twitter first.');
+      return {
+        success: false,
+        message: 'No active Twitter connection'
+      };
+    }
+    
     const { data, error } = await supabase.functions.invoke('twitter-refresh', {
       method: 'POST',
-      body: { userId: userData.id },
+      body: { userId: user.id },
       headers: {
         Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
       }
@@ -175,7 +243,7 @@ export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Pro
         const { data: recentMetrics, error: metricsError } = await supabase
           .from('follower_metrics')
           .select('id, recorded_at')
-          .eq('user_id', userData.id)
+          .eq('user_id', user.id)
           .gte('created_at', fiveMinutesAgo)
           .lte('created_at', nowTimestamp)
           .order('created_at', { ascending: false })
@@ -188,6 +256,25 @@ export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Pro
           return true;
         } else {
           console.warn('No recent metrics found after refresh');
+        }
+        
+        // Also check for social_posts
+        const { data: recentPosts, error: postsError } = await supabase
+          .from('social_posts')
+          .select('id, posted_at')
+          .eq('user_id', user.id)
+          .gte('created_at', fiveMinutesAgo)
+          .lte('created_at', nowTimestamp)
+          .order('created_at', { ascending: false })
+          .limit(1);
+          
+        if (postsError) {
+          console.warn('Could not verify posts update:', postsError);
+        } else if (recentPosts && recentPosts.length > 0) {
+          console.log('Social posts update verified:', recentPosts);
+          return true;
+        } else {
+          console.warn('No recent posts found after refresh');
         }
         
         return false;

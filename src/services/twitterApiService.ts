@@ -1,3 +1,4 @@
+
 // Import necessary modules
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -312,6 +313,9 @@ export class TwitterApiService {
     try {
       console.log('TwitterApiService: Verifying Twitter OAuth 1.0a credentials');
       
+      // First make sure user exists in users table
+      await this.ensureUserExists();
+      
       const { data, error } = await supabase.functions.invoke('twitter-integration', {
         method: 'POST',
         headers: {
@@ -350,27 +354,105 @@ export class TwitterApiService {
   }
   
   /**
+   * Ensure user exists in users table
+   */
+  async ensureUserExists(): Promise<void> {
+    try {
+      console.log('TwitterApiService: Ensuring user exists in database');
+      
+      // Get the current session
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        console.error('TwitterApiService: No session available');
+        return;
+      }
+      
+      // Check if user exists in users table
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_id', session.user.id)
+        .single();
+        
+      if (userError && userError.code !== 'PGRST116') {
+        console.error('TwitterApiService: Error checking user:', userError);
+        return;
+      }
+      
+      if (!userData && userError?.code === 'PGRST116') {
+        // User doesn't exist, create them
+        console.log('TwitterApiService: User not found in database, creating user record');
+        const { error: createError } = await supabase
+          .from('users')
+          .insert({
+            auth_id: session.user.id,
+            email: session.user.email
+          });
+          
+        if (createError) {
+          console.error('TwitterApiService: Error creating user:', createError);
+        } else {
+          console.log('TwitterApiService: User created successfully');
+        }
+      }
+    } catch (error) {
+      console.error('TwitterApiService: Error ensuring user exists:', error);
+    }
+  }
+  
+  /**
    * Store Twitter connection in database
    */
   async storeConnection(username: string, profileImage?: string): Promise<boolean> {
     try {
       console.log('TwitterApiService: Storing Twitter connection for user:', this.userId);
       
-      const { data, error } = await supabase
+      // First make sure the user record exists
+      await this.ensureUserExists();
+      
+      // Now store the connection
+      const connectionData = {
+        user_id: this.userId,
+        platform: 'twitter',
+        connected: true,
+        username: username,
+        profile_image: profileImage,
+        last_verified: new Date().toISOString()
+      };
+      
+      console.log('TwitterApiService: Connection data:', connectionData);
+      
+      // First, check if a connection already exists and try to update it
+      const { data: existingConnection, error: checkError } = await supabase
         .from('platform_connections')
-        .upsert({
-          user_id: this.userId,
-          platform: 'twitter',
-          connected: true,
-          username: username,
-          profile_image: profileImage,
-          last_verified: new Date().toISOString()
-        }, {
-          onConflict: 'user_id,platform'
-        });
+        .select('id')
+        .eq('user_id', this.userId)
+        .eq('platform', 'twitter')
+        .maybeSingle();
         
-      if (error) {
-        console.error('TwitterApiService: Error storing connection:', error);
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('TwitterApiService: Error checking existing connection:', checkError);
+      }
+      
+      let result;
+      if (existingConnection) {
+        // Update existing connection
+        console.log('TwitterApiService: Updating existing connection:', existingConnection.id);
+        result = await supabase
+          .from('platform_connections')
+          .update(connectionData)
+          .eq('id', existingConnection.id);
+      } else {
+        // Insert new connection
+        console.log('TwitterApiService: Creating new connection');
+        result = await supabase
+          .from('platform_connections')
+          .insert(connectionData);
+      }
+      
+      if (result.error) {
+        console.error('TwitterApiService: Error storing connection:', result.error);
         return false;
       }
       
@@ -450,6 +532,9 @@ export class TwitterApiService {
   async fetchProfileData(): Promise<any> {
     try {
       console.log('TwitterApiService: Fetching profile data with OAuth 1.0a');
+      
+      // Make sure user exists first
+      await this.ensureUserExists();
       
       const { data, error } = await supabase.functions.invoke('twitter-integration', {
         method: 'POST',

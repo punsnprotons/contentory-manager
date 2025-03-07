@@ -3,6 +3,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createHmac } from "https://deno.land/std@0.177.0/node/crypto.ts";
+import { Database } from "../_shared/supabase.types.ts";
 
 // CORS headers
 const corsHeaders = {
@@ -173,7 +174,7 @@ serve(async (req) => {
     console.log(`[TWITTER-INTEGRATION] Processing request for path: ${path} (OAuth 1.0a)`);
 
     // Create a Supabase client
-    const supabaseClient = createClient(
+    const supabaseClient = createClient<Database>(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: authHeader } } }
@@ -191,37 +192,6 @@ serve(async (req) => {
 
     console.log(`[TWITTER-INTEGRATION] User authenticated: ${user.id}`);
 
-    // Find the user in the database
-    const { data: userData, error: userError } = await supabaseClient
-      .from('users')
-      .select('id')
-      .eq('auth_id', user.id)
-      .single();
-
-    if (userError || !userData) {
-      // If user not found in the database, create them
-      if (userError.code === 'PGRST116') {
-        const { data: newUser, error: createError } = await supabaseClient
-          .from('users')
-          .insert({
-            auth_id: user.id,
-            email: user.email
-          })
-          .select('id')
-          .single();
-        
-        if (createError) {
-          console.error('[TWITTER-INTEGRATION] Error creating user in database:', createError);
-          throw new Error('Failed to create user in database');
-        }
-        
-        console.log('[TWITTER-INTEGRATION] Created new user in database:', newUser);
-      } else {
-        console.error('[TWITTER-INTEGRATION] Error finding user in database:', userError);
-        throw new Error('User not found in database');
-      }
-    }
-
     // Handle the Twitter API calls based on the path
     if (path === '/auth' || path === '/verify') {
       console.log('[TWITTER-INTEGRATION] Processing auth verification with OAuth 1.0a');
@@ -236,44 +206,91 @@ serve(async (req) => {
       
       console.log('[TWITTER-INTEGRATION] Twitter credentials verified successfully');
       
-      // Store connection info in platform_connections table
+      // Store connection info in platform_connections table - CRITICAL FIX HERE
       try {
-        // Check if connection already exists
-        const { data: existingConnection } = await supabaseClient
-          .from('platform_connections')
+        console.log('[TWITTER-INTEGRATION] Storing Twitter connection in database for user:', user.id);
+        
+        // First check if the user exists in the users table, if not create them
+        const { data: userData, error: userError } = await supabaseClient
+          .from('users')
           .select('id')
-          .eq('user_id', user.id)
-          .eq('platform', 'twitter')
-          .single();
-          
-        // If not exists, create a new connection record
-        if (!existingConnection) {
-          console.log('[TWITTER-INTEGRATION] Creating new Twitter connection record');
-          await supabaseClient
-            .from('platform_connections')
-            .insert({
-              user_id: user.id,
-              platform: 'twitter',
-              connected: true,
-              username: verifyResult.user?.screen_name,
-              profile_image: verifyResult.user?.profile_image_url_https,
-              last_verified: new Date().toISOString()
-            });
-        } else {
-          // Update existing connection
-          console.log('[TWITTER-INTEGRATION] Updating existing Twitter connection record');
-          await supabaseClient
-            .from('platform_connections')
-            .update({
-              connected: true,
-              username: verifyResult.user?.screen_name,
-              profile_image: verifyResult.user?.profile_image_url_https,
-              last_verified: new Date().toISOString()
-            })
-            .eq('id', existingConnection.id);
+          .eq('auth_id', user.id)
+          .maybeSingle();
+
+        if (userError) {
+          console.error('[TWITTER-INTEGRATION] Error finding user:', userError);
+          // Continue anyway to try to store the connection
         }
         
-        console.log('[TWITTER-INTEGRATION] Twitter connection stored/updated in database');
+        if (!userData) {
+          console.log('[TWITTER-INTEGRATION] User not found in users table, creating user entry');
+          const { error: insertError } = await supabaseClient
+            .from('users')
+            .insert({
+              auth_id: user.id,
+              email: user.email
+            });
+          
+          if (insertError) {
+            console.error('[TWITTER-INTEGRATION] Error creating user in database:', insertError);
+          } else {
+            console.log('[TWITTER-INTEGRATION] Created new user in database');
+          }
+        }
+
+        // Now store the connection - we use upsert to handle both insert and update cases
+        console.log('[TWITTER-INTEGRATION] Storing/updating platform connection for Twitter');
+        
+        const connectionData = {
+          user_id: user.id,
+          platform: 'twitter',
+          connected: true,
+          username: verifyResult.user?.screen_name,
+          profile_image: verifyResult.user?.profile_image_url_https,
+          last_verified: new Date().toISOString()
+        };
+        
+        console.log('[TWITTER-INTEGRATION] Connection data:', connectionData);
+        
+        const { error: connectionError } = await supabaseClient
+          .from('platform_connections')
+          .upsert(connectionData, {
+            onConflict: 'user_id,platform'
+          });
+          
+        if (connectionError) {
+          console.error('[TWITTER-INTEGRATION] Error storing/updating connection:', connectionError);
+          console.error('[TWITTER-INTEGRATION] Detailed error:', JSON.stringify(connectionError));
+          
+          // Try another approach - delete then insert
+          if (connectionError.code === '42501') { // Permission denied error
+            console.log('[TWITTER-INTEGRATION] Trying alternative approach - delete and insert');
+            
+            // First try to delete any existing connection
+            const { error: deleteError } = await supabaseClient
+              .from('platform_connections')
+              .delete()
+              .eq('user_id', user.id)
+              .eq('platform', 'twitter');
+              
+            if (deleteError) {
+              console.error('[TWITTER-INTEGRATION] Error deleting existing connection:', deleteError);
+            } else {
+              // Then insert new connection
+              const { error: insertError } = await supabaseClient
+                .from('platform_connections')
+                .insert(connectionData);
+                
+              if (insertError) {
+                console.error('[TWITTER-INTEGRATION] Error inserting new connection:', insertError);
+              } else {
+                console.log('[TWITTER-INTEGRATION] Successfully inserted connection after delete');
+              }
+            }
+          }
+        } else {
+          console.log('[TWITTER-INTEGRATION] Twitter connection stored/updated in database successfully');
+        }
       } catch (dbError) {
         console.error('[TWITTER-INTEGRATION] Error storing/updating connection:', dbError);
         // Continue even if we can't update the DB, but log the error
