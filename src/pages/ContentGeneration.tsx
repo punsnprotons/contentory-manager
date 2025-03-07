@@ -118,11 +118,7 @@ const ContentGeneration: React.FC = () => {
       if (selectedPlatform === 'twitter') {
         toast.loading('Publishing to Twitter...');
         
-        // Add diagnostics for Twitter tokens
-        console.log("Checking Twitter integration...");
-        
         try {
-          // Verify credentials before attempting to publish
           const verifyResponse = await supabase.functions.invoke('twitter-api', {
             method: 'POST',
             headers: {
@@ -131,10 +127,26 @@ const ContentGeneration: React.FC = () => {
           });
           
           if (verifyResponse.error) {
+            if (verifyResponse.error.message && verifyResponse.error.message.includes('rate limit')) {
+              toast.dismiss();
+              toast.error('Twitter API rate limit exceeded', {
+                description: 'Twitter has temporarily limited our API requests. Please try again in a few minutes.'
+              });
+              return;
+            }
+            
             console.error('Twitter credentials verification failed:', verifyResponse.error);
             toast.dismiss();
             toast.error('Twitter credential verification failed', {
               description: verifyResponse.error.message || 'Could not verify Twitter credentials'
+            });
+            return;
+          }
+          
+          if (verifyResponse.data && verifyResponse.data.rateLimited) {
+            toast.dismiss();
+            toast.error('Twitter API rate limit exceeded', {
+              description: 'Twitter has temporarily limited our API requests. Please try again later.'
             });
             return;
           }
@@ -149,7 +161,13 @@ const ContentGeneration: React.FC = () => {
         if (!twitterResult.success) {
           toast.dismiss();
           
-          // Display a more detailed error dialog for Twitter API permission issues
+          if (twitterResult.error?.includes('rate limit') || twitterResult.error?.includes('429')) {
+            toast.error('Twitter API rate limit exceeded', {
+              description: 'Twitter has temporarily limited our API requests. Please try again in a few minutes.'
+            });
+            return;
+          }
+          
           if (twitterResult.error?.includes('permission') || 
               twitterResult.error?.includes('Forbidden') || 
               twitterResult.error?.includes('403')) {
@@ -200,6 +218,14 @@ const ContentGeneration: React.FC = () => {
       navigate("/pending-content");
     } catch (error) {
       console.error("Error publishing content:", error);
+      
+      if (error instanceof Error && error.message.includes('rate limit')) {
+        toast.error('Rate limit exceeded', {
+          description: 'Twitter has temporarily limited our API requests. Please try again in a few minutes.'
+        });
+        return;
+      }
+      
       toast.error("Publishing failed", {
         description: error instanceof Error ? error.message : "An unexpected error occurred."
       });
@@ -505,7 +531,6 @@ const ContentGeneration: React.FC = () => {
         isScheduling={isSaving}
       />
       
-      {/* Twitter error dialog with detailed instructions */}
       <Dialog open={isErrorDialogOpen} onOpenChange={setIsErrorDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
