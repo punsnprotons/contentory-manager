@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -33,21 +34,7 @@ const Settings = () => {
   const [rateLimited, setRateLimited] = useState(false);
   const { session } = useAuth();
   
-  useEffect(() => {
-    const hasAuthParam = window.location.search.includes('auth=success');
-
-    if (hasAuthParam) {
-      const newUrl = window.location.pathname;
-      window.history.replaceState({}, document.title, newUrl);
-      
-      toast.success("Successfully connected to Twitter!");
-      
-      if (session?.user) {
-        loadConnections();
-      }
-    }
-  }, [session]);
-  
+  // Load connections and user settings when component mounts or session changes
   useEffect(() => {
     if (session?.user) {
       console.log("Settings: Session user available, loading settings", session.user);
@@ -75,6 +62,23 @@ const Settings = () => {
     }
   }, [session]);
 
+  // Check for auth success parameter in URL
+  useEffect(() => {
+    const hasAuthParam = window.location.search.includes('auth=success');
+
+    if (hasAuthParam) {
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+      
+      toast.success("Successfully connected to Twitter!");
+      
+      if (session?.user) {
+        loadConnections();
+      }
+    }
+  }, [session]);
+  
+  // Listen for message events (for iframe communication)
   useEffect(() => {
     const messageHandler = (event: MessageEvent) => {
       console.log("Settings: Received message event:", event);
@@ -150,7 +154,7 @@ const Settings = () => {
       
       const { data, error } = await supabase
         .from('platform_connections')
-        .select('platform, connected, username, last_verified')
+        .select('platform, connected, username, profile_image, last_verified')
         .eq('user_id', session.user.id);
         
       if (error) {

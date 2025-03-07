@@ -33,7 +33,7 @@ export const checkTwitterConnection = async (): Promise<boolean> => {
     // First check if we have a record in platform_connections
     const { data: connections, error: connectionsError } = await supabase
       .from('platform_connections')
-      .select('connected, last_verified')
+      .select('connected, last_verified, username')
       .eq('user_id', user.id)
       .eq('platform', 'twitter')
       .single();
@@ -52,6 +52,8 @@ export const checkTwitterConnection = async (): Promise<boolean> => {
       return false;
     }
     
+    console.log('Found Twitter connection in database:', connections);
+    
     // If we have a connection that was verified less than 24 hours ago, consider it valid
     if (connections.last_verified) {
       const lastVerified = new Date(connections.last_verified);
@@ -62,30 +64,36 @@ export const checkTwitterConnection = async (): Promise<boolean> => {
         console.log('Twitter connection is valid (verified in the last 24 hours)');
         return true;
       }
+      
+      console.log(`Connection was verified ${hoursSinceVerified.toFixed(1)} hours ago, verifying again`);
     }
     
-    // If it's been more than 24 hours, verify the connection again
+    // If it's been more than 24 hours or no verification time, verify the connection again
     console.log('Verifying Twitter connection...');
-    const { data: verifyResult, error: verifyError } = await supabase.functions.invoke('twitter-api', {
+    const { data: verifyResult, error: verifyError } = await supabase.functions.invoke('twitter-integration', {
       method: 'POST',
       headers: {
-        path: '/verify-credentials',
+        path: '/verify',
       }
     });
     
     if (verifyError || !verifyResult?.verified) {
       console.error('Twitter connection verification failed:', verifyError || 'Not verified');
       
-      // Update the connection status to false since verification failed
-      await supabase
-        .from('platform_connections')
-        .update({
-          connected: false,
-          last_verified: new Date().toISOString()
-        })
-        .eq('user_id', user.id)
-        .eq('platform', 'twitter');
-        
+      if (connections && connections.connected) {
+        // Update the connection status to false since verification failed
+        await supabase
+          .from('platform_connections')
+          .update({
+            connected: false,
+            last_verified: new Date().toISOString()
+          })
+          .eq('user_id', user.id)
+          .eq('platform', 'twitter');
+          
+        console.log('Updated Twitter connection status to disconnected');
+      }
+      
       return false;
     }
     
@@ -94,6 +102,8 @@ export const checkTwitterConnection = async (): Promise<boolean> => {
       .from('platform_connections')
       .update({
         connected: true,
+        username: verifyResult.user?.screen_name || connections.username,
+        profile_image: verifyResult.user?.profile_image_url_https,
         last_verified: new Date().toISOString()
       })
       .eq('user_id', user.id)
@@ -238,36 +248,8 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
     
     console.log('Publishing content to Twitter using OAuth 1.0a:', content);
     
-    // Verify Twitter credentials before attempting to publish
-    console.log('Verifying Twitter credentials before publishing...');
-    const verifyResponse = await supabase.functions.invoke('twitter-api', {
-      method: 'POST',
-      headers: {
-        path: '/verify-credentials',
-      }
-    });
-    
-    if (verifyResponse.error) {
-      console.error('Twitter credentials verification failed:', verifyResponse.error);
-      return {
-        success: false,
-        message: 'Twitter credentials verification failed',
-        error: verifyResponse.error.message || 'Unknown error during verification',
-        instructions: "Make sure your Twitter API credentials are correctly set in the Supabase Edge Function secrets, and that your app has 'Read and Write' permissions."
-      };
-    }
-    
-    console.log('Twitter credentials verification result:', verifyResponse.data);
-    if (!verifyResponse.data?.verified) {
-      return {
-        success: false,
-        message: 'Twitter credentials are invalid or insufficient permissions',
-        error: verifyResponse.data?.message || 'Verification failed',
-        instructions: "Make sure your Twitter app has 'Read and write' permissions enabled in the Twitter Developer Portal settings."
-      };
-    }
-    
-    console.log('Twitter credentials verified successfully. Proceeding with tweet...');
+    // Since we've already verified the connection above, we can proceed with publishing
+    console.log('Twitter credentials already verified. Proceeding with tweet...');
     
     // Now proceed with publishing the tweet using OAuth 1.0a
     const response = await supabase.functions.invoke('twitter-api', {

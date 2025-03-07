@@ -248,6 +248,7 @@ serve(async (req) => {
           
         // If not exists, create a new connection record
         if (!existingConnection) {
+          console.log('[TWITTER-INTEGRATION] Creating new Twitter connection record');
           await supabaseClient
             .from('platform_connections')
             .insert({
@@ -255,15 +256,18 @@ serve(async (req) => {
               platform: 'twitter',
               connected: true,
               username: verifyResult.user?.screen_name,
+              profile_image: verifyResult.user?.profile_image_url_https,
               last_verified: new Date().toISOString()
             });
         } else {
           // Update existing connection
+          console.log('[TWITTER-INTEGRATION] Updating existing Twitter connection record');
           await supabaseClient
             .from('platform_connections')
             .update({
               connected: true,
               username: verifyResult.user?.screen_name,
+              profile_image: verifyResult.user?.profile_image_url_https,
               last_verified: new Date().toISOString()
             })
             .eq('id', existingConnection.id);
@@ -272,7 +276,7 @@ serve(async (req) => {
         console.log('[TWITTER-INTEGRATION] Twitter connection stored/updated in database');
       } catch (dbError) {
         console.error('[TWITTER-INTEGRATION] Error storing/updating connection:', dbError);
-        // Continue even if we can't update the DB
+        // Continue even if we can't update the DB, but log the error
       }
       
       return new Response(JSON.stringify({

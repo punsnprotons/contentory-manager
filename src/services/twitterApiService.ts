@@ -1,4 +1,3 @@
-
 // Import necessary modules
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -313,10 +312,10 @@ export class TwitterApiService {
     try {
       console.log('TwitterApiService: Verifying Twitter OAuth 1.0a credentials');
       
-      const { data, error } = await supabase.functions.invoke('twitter-api', {
+      const { data, error } = await supabase.functions.invoke('twitter-integration', {
         method: 'POST',
         headers: {
-          'path': '/verify-credentials'
+          'path': '/verify'
         }
       });
       
@@ -339,7 +338,7 @@ export class TwitterApiService {
       
       // Store connection info in the database
       if (data.user) {
-        await this.storeConnection(data.user.screen_name);
+        await this.storeConnection(data.user.screen_name, data.user.profile_image_url_https);
       }
       
       console.log('TwitterApiService: OAuth 1.0a credentials verified successfully');
@@ -353,7 +352,7 @@ export class TwitterApiService {
   /**
    * Store Twitter connection in database
    */
-  async storeConnection(username: string): Promise<boolean> {
+  async storeConnection(username: string, profileImage?: string): Promise<boolean> {
     try {
       console.log('TwitterApiService: Storing Twitter connection for user:', this.userId);
       
@@ -364,6 +363,7 @@ export class TwitterApiService {
           platform: 'twitter',
           connected: true,
           username: username,
+          profile_image: profileImage,
           last_verified: new Date().toISOString()
         }, {
           onConflict: 'user_id,platform'
@@ -451,10 +451,10 @@ export class TwitterApiService {
     try {
       console.log('TwitterApiService: Fetching profile data with OAuth 1.0a');
       
-      const { data, error } = await supabase.functions.invoke('twitter-api', {
+      const { data, error } = await supabase.functions.invoke('twitter-integration', {
         method: 'POST',
         headers: {
-          'path': '/verify-credentials'
+          'path': '/verify'
         }
       });
       
@@ -468,9 +468,12 @@ export class TwitterApiService {
         throw new Error('Failed to fetch profile data');
       }
       
-      // Store connection with username
+      // Store connection with username and profile image
       if (data.user.screen_name) {
-        await this.storeConnection(data.user.screen_name);
+        await this.storeConnection(
+          data.user.screen_name, 
+          data.user.profile_image_url_https
+        );
       }
       
       console.log('TwitterApiService: Profile data fetched successfully');
