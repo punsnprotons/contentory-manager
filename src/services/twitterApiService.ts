@@ -3,6 +3,7 @@
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { SocialPlatform } from '@/types';
 
 // Rate limiting constants
 const RATE_LIMIT_BACKOFF_MS = 5000; // 5 seconds backoff for retry
@@ -414,7 +415,7 @@ export class TwitterApiService {
       // Now store the connection
       const connectionData = {
         user_id: this.userId,
-        platform: 'twitter',
+        platform: 'twitter' as SocialPlatform, // Cast as SocialPlatform to fix type error
         connected: true,
         username: username,
         profile_image: profileImage,

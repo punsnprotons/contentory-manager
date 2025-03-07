@@ -20,6 +20,7 @@ export interface Database {
           last_verified: string | null;
           created_at: string;
           updated_at: string;
+          profile_image: string | null;
         };
         Insert: {
           id?: string;
@@ -30,6 +31,7 @@ export interface Database {
           last_verified?: string | null;
           created_at?: string;
           updated_at?: string;
+          profile_image?: string | null;
         };
         Update: {
           id?: string;
@@ -40,6 +42,7 @@ export interface Database {
           last_verified?: string | null;
           created_at?: string;
           updated_at?: string;
+          profile_image?: string | null;
         };
       };
       social_posts: {

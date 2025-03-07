@@ -67,7 +67,7 @@ export const checkTwitterConnection = async (): Promise<boolean> => {
       .from('platform_connections')
       .select('connected, last_verified, username')
       .eq('user_id', user.id)
-      .eq('platform', 'twitter')
+      .eq('platform', 'twitter' as SocialPlatform) // Cast as SocialPlatform
       .maybeSingle();
     
     console.log('Platform connections query result:', connections, connectionsError);
@@ -121,7 +121,7 @@ export const checkTwitterConnection = async (): Promise<boolean> => {
             last_verified: new Date().toISOString()
           })
           .eq('user_id', user.id)
-          .eq('platform', 'twitter');
+          .eq('platform', 'twitter' as SocialPlatform); // Cast as SocialPlatform
           
         console.log('Updated Twitter connection status to disconnected');
       }
@@ -139,7 +139,7 @@ export const checkTwitterConnection = async (): Promise<boolean> => {
         last_verified: new Date().toISOString()
       })
       .eq('user_id', user.id)
-      .eq('platform', 'twitter');
+      .eq('platform', 'twitter' as SocialPlatform); // Cast as SocialPlatform
     
     console.log('Twitter connection verified successfully');
     return true;
