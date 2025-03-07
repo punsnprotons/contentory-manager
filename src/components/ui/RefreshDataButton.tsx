@@ -74,10 +74,10 @@ export const checkTwitterConnection = async (): Promise<boolean> => {
     console.log('Verifying Twitter connection...');
     const accessToken = await getAccessToken();
     
-    const { data: verifyResult, error: verifyError } = await supabase.functions.invoke('twitter-integration', {
+    const { data: verifyResult, error: verifyError } = await supabase.functions.invoke('twitter-api', {
       method: 'POST',
       headers: {
-        path: '/verify',
+        path: '/verify-credentials',
         Authorization: `Bearer ${accessToken}`
       }
     });
@@ -400,7 +400,7 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
         user_id: user.id,
         platform: 'twitter' as SocialPlatform,
         content: content,
-        external_id: response.data?.id?.toString() || null,
+        external_id: response.data?.tweet?.id_str || null,
         posted_at: new Date().toISOString()
       });
     }

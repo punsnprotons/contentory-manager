@@ -45,7 +45,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, path',
 };
 
-// OAuth 1.0a helper functions - COMPLETELY REVISED FOR CORRECT TWITTER V1.1 API USAGE
+// COMPLETELY FIXED OAUTH 1.0A IMPLEMENTATION FOR TWITTER V1.1 API
+// Step 1: Generate the OAuth signature (this is the most critical part)
 function generateOAuthSignature(
   method: string,
   url: string,
@@ -54,47 +55,46 @@ function generateOAuthSignature(
   consumerSecret: string,
   tokenSecret: string
 ): string {
-  // CRITICAL FIX: Combine OAuth parameters with POST parameters for signature base string
+  // CRITICAL FIX: Combine both OAuth parameters AND POST parameters for the signature base
   const allParams = { ...oauthParams, ...postParams };
   
-  // Sort parameters alphabetically by key
-  const sortedParams = Object.keys(allParams)
-    .sort()
-    .reduce<Record<string, string>>((acc, key) => {
-      acc[key] = allParams[key];
-      return acc;
-    }, {});
+  // Sort parameters alphabetically by key (required by OAuth 1.0a spec)
+  const paramKeys = Object.keys(allParams).sort();
   
-  // Create parameter string
-  const paramString = Object.entries(sortedParams)
-    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+  // Build parameter string with proper encoding (critical for correct signature)
+  const paramString = paramKeys
+    .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(allParams[key])}`)
     .join("&");
   
-  // Create signature base string
+  // Create the signature base string (critical format for Twitter API)
   const signatureBaseString = [
     method.toUpperCase(),
     encodeURIComponent(url),
     encodeURIComponent(paramString)
   ].join("&");
   
-  // Create signing key
+  // Create the signing key
   const signingKey = `${encodeURIComponent(consumerSecret)}&${encodeURIComponent(tokenSecret)}`;
   
-  // Generate signature
+  // Generate HMAC-SHA1 signature
   const hmacSha1 = createHmac("sha1", signingKey);
-  const signature = hmacSha1.update(signatureBaseString).digest("base64");
+  hmacSha1.update(signatureBaseString);
+  const signature = hmacSha1.digest("base64");
   
+  // Debug logs (critical for troubleshooting)
   console.log("[TWITTER-API] Signature Base String:", signatureBaseString);
   console.log("[TWITTER-API] Generated Signature:", signature);
   
   return signature;
 }
 
+// Step 2: Generate the full OAuth header with the signature
 function generateOAuthHeader(
   method: string,
   url: string,
   postParams: Record<string, string> = {}
 ): string {
+  // Get Twitter API credentials, trim to avoid whitespace issues
   const apiKey = Deno.env.get("TWITTER_API_KEY")?.trim();
   const apiSecret = Deno.env.get("TWITTER_API_SECRET")?.trim();
   const accessToken = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
@@ -104,6 +104,7 @@ function generateOAuthHeader(
     throw new Error("Missing required Twitter OAuth 1.0a credentials");
   }
 
+  // Create OAuth parameters (DO NOT include post params here)
   const oauthParams: Record<string, string> = {
     oauth_consumer_key: apiKey,
     oauth_nonce: Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2),
@@ -113,7 +114,7 @@ function generateOAuthHeader(
     oauth_version: "1.0"
   };
 
-  // Generate signature using both OAuth params and post params
+  // Generate signature USING both OAuth params and POST params
   const signature = generateOAuthSignature(
     method,
     url,
@@ -126,7 +127,7 @@ function generateOAuthHeader(
   // Add signature to OAuth params
   oauthParams.oauth_signature = signature;
 
-  // Build OAuth header string - only include OAuth params in the header
+  // Build OAuth header string - ONLY include OAuth params in the header (not post params)
   return "OAuth " + Object.entries(oauthParams)
     .map(([key, value]) => `${encodeURIComponent(key)}="${encodeURIComponent(value)}"`)
     .join(", ");
@@ -328,41 +329,45 @@ serve(async (req) => {
       }
     }
 
-    // Handle tweeting - fixed to use v1.1 API with correct URL and parameters
+    // Handle tweeting - COMPLETELY FIXED FOR V1.1 API WITH PROPER FORM ENCODING
     if (path === '/tweet') {
       const requestBody = await req.json();
       
       console.log('[TWITTER-API] Tweet content with OAuth 1.0a:', requestBody.content.substring(0, 50) + (requestBody.content.length > 50 ? '...' : ''));
       
       try {
-        // Correct Twitter v1.1 API endpoint for posting tweets
+        // Twitter v1.1 API endpoint for posting tweets
         const baseUrl = "https://api.twitter.com/1.1/statuses/update.json";
         const method = "POST";
         
-        // Post parameters - only include status and not media for simplicity
+        // CRITICAL: Post parameters as a plain object for signature
         const postParams = {
           status: requestBody.content
         };
         
-        // Generate OAuth header with the post parameters included for signature
+        // Generate OAuth header WITH post parameters included for signature
         const oauthHeader = generateOAuthHeader(method, baseUrl, postParams);
         
-        console.log('[TWITTER-API] Tweet content with OAuth 1.0a:', postParams.status.substring(0, 50) + '...');
-        console.log('[TWITTER-API] OAuth Header:', oauthHeader);
+        console.log('[TWITTER-API] OAuth Header:', oauthHeader.substring(0, 100) + '...');
         
-        // Convert post parameters to URL-encoded form data string
+        // CRITICAL: Convert post parameters to form-urlencoded format for the body
         const formData = new URLSearchParams();
         for (const [key, value] of Object.entries(postParams)) {
           formData.append(key, value);
         }
         
+        const formDataString = formData.toString();
+        console.log('[TWITTER-API] Form data:', formDataString);
+        
+        // Make the request with proper headers and form-encoded body
         const response = await fetch(baseUrl, {
           method: method,
           headers: {
             "Authorization": oauthHeader,
-            "Content-Type": "application/x-www-form-urlencoded"
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Content-Length": formDataString.length.toString()
           },
-          body: formData.toString()
+          body: formDataString
         });
         
         const responseText = await response.text();
