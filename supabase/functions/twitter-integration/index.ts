@@ -223,7 +223,7 @@ serve(async (req) => {
     }
 
     // Handle the Twitter API calls based on the path
-    if (path === '/auth') {
+    if (path === '/auth' || path === '/verify') {
       console.log('[TWITTER-INTEGRATION] Processing auth verification with OAuth 1.0a');
       
       // With OAuth 1.0a, we just verify credentials directly using app tokens

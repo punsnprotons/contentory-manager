@@ -1,3 +1,4 @@
+
 // Import necessary modules
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -310,16 +311,12 @@ export class TwitterApiService {
    */
   async verifyCredentials(): Promise<boolean> {
     try {
-      console.log('TwitterApiService: Verifying Twitter credentials with OAuth 1.0a');
+      console.log('TwitterApiService: Verifying Twitter OAuth 1.0a credentials');
       
       const { data, error } = await supabase.functions.invoke('twitter-api', {
         method: 'POST',
         headers: {
           'path': '/verify-credentials'
-        },
-        body: { 
-          oauth1: true,
-          timestamp: Date.now() 
         }
       });
       
@@ -340,6 +337,11 @@ export class TwitterApiService {
         return false;
       }
       
+      // Store connection info in the database
+      if (data.user) {
+        await this.storeConnection(data.user.screen_name);
+      }
+      
       console.log('TwitterApiService: OAuth 1.0a credentials verified successfully');
       return true;
     } catch (error) {
@@ -355,13 +357,16 @@ export class TwitterApiService {
     try {
       console.log('TwitterApiService: Storing Twitter connection for user:', this.userId);
       
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('platform_connections')
         .upsert({
           user_id: this.userId,
           platform: 'twitter',
           connected: true,
-          username: username
+          username: username,
+          last_verified: new Date().toISOString()
+        }, {
+          onConflict: 'user_id,platform'
         });
         
       if (error) {
@@ -450,9 +455,6 @@ export class TwitterApiService {
         method: 'POST',
         headers: {
           'path': '/verify-credentials'
-        },
-        body: { 
-          oauth1: true 
         }
       });
       
@@ -467,8 +469,8 @@ export class TwitterApiService {
       }
       
       // Store connection with username
-      if (data.user.username) {
-        await this.storeConnection(data.user.username);
+      if (data.user.screen_name) {
+        await this.storeConnection(data.user.screen_name);
       }
       
       console.log('TwitterApiService: Profile data fetched successfully');

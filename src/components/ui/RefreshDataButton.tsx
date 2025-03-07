@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
@@ -76,8 +75,29 @@ export const checkTwitterConnection = async (): Promise<boolean> => {
     
     if (verifyError || !verifyResult?.verified) {
       console.error('Twitter connection verification failed:', verifyError || 'Not verified');
+      
+      // Update the connection status to false since verification failed
+      await supabase
+        .from('platform_connections')
+        .update({
+          connected: false,
+          last_verified: new Date().toISOString()
+        })
+        .eq('user_id', user.id)
+        .eq('platform', 'twitter');
+        
       return false;
     }
+    
+    // Update the connection with the new verification time
+    await supabase
+      .from('platform_connections')
+      .update({
+        connected: true,
+        last_verified: new Date().toISOString()
+      })
+      .eq('user_id', user.id)
+      .eq('platform', 'twitter');
     
     console.log('Twitter connection verified successfully');
     return true;
@@ -272,11 +292,25 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
       if (errorMessage.includes('401') || 
           errorMessage.includes('Could not authenticate you') ||
           errorMessage.includes('32')) {
+        
+        // Update connection status to false since we got an auth error
+        const user = await getCurrentUser();
+        if (user) {
+          await supabase
+            .from('platform_connections')
+            .update({
+              connected: false,
+              last_verified: new Date().toISOString()
+            })
+            .eq('user_id', user.id)
+            .eq('platform', 'twitter');
+        }
+        
         return {
           success: false,
           message: 'Twitter API Authentication Error',
           error: errorMessage,
-          instructions: "There's an issue with your Twitter API credentials. Please verify that the TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_ACCESS_TOKEN, and TWITTER_ACCESS_TOKEN_SECRET are all correctly set and not expired in your Supabase Edge Function secrets."
+          instructions: "There's an issue with your Twitter API credentials. Please reconnect your Twitter account in the Settings page."
         };
       }
       
@@ -309,6 +343,18 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
     }
     
     console.log('Successfully published to Twitter:', response.data);
+    
+    // Store the successful post in the social_posts table
+    const user = await getCurrentUser();
+    if (user) {
+      await supabase.from('social_posts').insert({
+        user_id: user.id,
+        platform: 'twitter',
+        content: content,
+        external_id: response.data?.id?.toString() || null,
+        posted_at: new Date().toISOString()
+      });
+    }
     
     return {
       success: true,

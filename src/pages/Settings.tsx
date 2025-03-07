@@ -18,6 +18,7 @@ interface Connection {
   connected: boolean;
   username?: string;
   profile_image?: string;
+  last_verified?: string;
 }
 
 const Settings = () => {
@@ -149,7 +150,7 @@ const Settings = () => {
       
       const { data, error } = await supabase
         .from('platform_connections')
-        .select('platform, connected, username')
+        .select('platform, connected, username, last_verified')
         .eq('user_id', session.user.id);
         
       if (error) {
@@ -166,7 +167,19 @@ const Settings = () => {
           platform: conn.platform as SocialPlatform
         }));
         
-        setConnections(typedConnections);
+        const platforms: SocialPlatform[] = ['twitter', 'instagram'];
+        const finalConnections: Connection[] = [];
+        
+        platforms.forEach(platform => {
+          const existingConn = typedConnections.find(conn => conn.platform === platform);
+          if (existingConn) {
+            finalConnections.push(existingConn);
+          } else {
+            finalConnections.push({ platform, connected: false });
+          }
+        });
+        
+        setConnections(finalConnections);
       } else {
         console.log("Settings: No connections found, using defaults");
         setConnections([
@@ -234,7 +247,8 @@ const Settings = () => {
         if (verificationResult) {
           toast.success('Successfully connected to Twitter!');
           
-          await twitterService.fetchProfileData();
+          const profileData = await twitterService.fetchProfileData();
+          console.log("Settings: Profile data fetched:", profileData);
           
           await loadConnections();
         } else {
