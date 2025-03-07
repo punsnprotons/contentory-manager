@@ -45,34 +45,56 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, path',
 };
 
-// OAuth 1.0a helper functions - REVISED FOR CORRECTNESS
+// OAuth 1.0a helper functions - COMPLETELY REVISED FOR CORRECT TWITTER V1.1 API USAGE
 function generateOAuthSignature(
   method: string,
   url: string,
-  params: Record<string, string>,
+  oauthParams: Record<string, string>,
+  postParams: Record<string, string> = {},
   consumerSecret: string,
   tokenSecret: string
 ): string {
-  // Sort all parameters alphabetically by the encoded key
-  const encodedParams = Object.entries(params)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
+  // Combine OAuth parameters with post parameters for signature generation
+  const allParams = { ...oauthParams, ...postParams };
   
-  const signatureBaseString = `${method}&${encodeURIComponent(url)}&${encodeURIComponent(encodedParams.join("&"))}`;
+  // Sort parameters alphabetically by key
+  const sortedParams = Object.keys(allParams)
+    .sort()
+    .reduce<Record<string, string>>((acc, key) => {
+      acc[key] = allParams[key];
+      return acc;
+    }, {});
   
-  // Create the signing key
+  // Create parameter string
+  const paramString = Object.entries(sortedParams)
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join("&");
+  
+  // Create signature base string
+  const signatureBaseString = [
+    method.toUpperCase(),
+    encodeURIComponent(url),
+    encodeURIComponent(paramString)
+  ].join("&");
+  
+  // Create signing key
   const signingKey = `${encodeURIComponent(consumerSecret)}&${encodeURIComponent(tokenSecret)}`;
   
+  // Generate signature
   const hmacSha1 = createHmac("sha1", signingKey);
   const signature = hmacSha1.update(signatureBaseString).digest("base64");
-
-  console.log("[TWITTER-API] Signature Base String:", signatureBaseString.substring(0, 100) + "...");
+  
+  console.log("[TWITTER-API] Signature Base String:", signatureBaseString);
   console.log("[TWITTER-API] Generated Signature:", signature);
-
+  
   return signature;
 }
 
-function generateOAuthHeader(method: string, url: string, postParams: Record<string, string> = {}): string {
+function generateOAuthHeader(
+  method: string,
+  url: string,
+  postParams: Record<string, string> = {}
+): string {
   const apiKey = Deno.env.get("TWITTER_API_KEY")?.trim();
   const apiSecret = Deno.env.get("TWITTER_API_SECRET")?.trim();
   const accessToken = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
@@ -84,37 +106,30 @@ function generateOAuthHeader(method: string, url: string, postParams: Record<str
 
   const oauthParams: Record<string, string> = {
     oauth_consumer_key: apiKey,
-    oauth_nonce: Math.random().toString(36).substring(2),
+    oauth_nonce: Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2),
     oauth_signature_method: "HMAC-SHA1",
     oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
     oauth_token: accessToken,
-    oauth_version: "1.0",
+    oauth_version: "1.0"
   };
 
-  // Combine OAuth parameters with post parameters for signature
-  const allParams = { ...oauthParams, ...postParams };
-  
+  // Generate signature using both OAuth params and post params
   const signature = generateOAuthSignature(
     method,
     url,
-    allParams,
+    oauthParams,
+    postParams,
     apiSecret,
     accessTokenSecret
   );
 
-  // Only include OAuth parameters in the header
-  const headerParams = {
-    ...oauthParams,
-    oauth_signature: signature,
-  };
+  // Add signature to OAuth params
+  oauthParams.oauth_signature = signature;
 
-  return (
-    "OAuth " +
-    Object.entries(headerParams)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `${encodeURIComponent(k)}="${encodeURIComponent(v)}"`)
-      .join(", ")
-  );
+  // Build OAuth header string - only include OAuth params in the header
+  return "OAuth " + Object.entries(oauthParams)
+    .map(([key, value]) => `${encodeURIComponent(key)}="${encodeURIComponent(value)}"`)
+    .join(", ");
 }
 
 serve(async (req) => {
@@ -231,6 +246,43 @@ serve(async (req) => {
         
         const userData = await response.json();
         
+        // Store connection info in the platform_connections table
+        try {
+          // Check if connection already exists
+          const { data: existingConnection } = await supabaseClient
+            .from('platform_connections')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('platform', 'twitter')
+            .single();
+            
+          // If not exists, create a new connection record
+          if (!existingConnection) {
+            await supabaseClient
+              .from('platform_connections')
+              .insert({
+                user_id: user.id,
+                platform: 'twitter',
+                connected: true,
+                username: userData.screen_name,
+                last_verified: new Date().toISOString()
+              });
+          } else {
+            // Update existing connection
+            await supabaseClient
+              .from('platform_connections')
+              .update({
+                connected: true,
+                username: userData.screen_name,
+                last_verified: new Date().toISOString()
+              })
+              .eq('id', existingConnection.id);
+          }
+        } catch (dbError) {
+          console.error('[TWITTER-API] Error storing/updating connection:', dbError);
+          // Continue even if we can't update the DB
+        }
+        
         return new Response(JSON.stringify({
           verified: true,
           user: userData,
@@ -251,35 +303,34 @@ serve(async (req) => {
       }
     }
 
-    // Call the twitter-integration function based on the path
+    // Handle tweeting - fixed to use v1.1 API with correct URL and parameters
     if (path === '/tweet') {
-      // For tweet endpoint, use OAuth 1.0a directly
       const requestBody = await req.json();
       
       console.log('[TWITTER-API] Tweet content with OAuth 1.0a:', requestBody.content.substring(0, 50) + (requestBody.content.length > 50 ? '...' : ''));
       
       try {
-        // This is the correct endpoint URL for posting tweets
+        // Correct Twitter v1.1 API endpoint for posting tweets
         const baseUrl = "https://api.twitter.com/1.1/statuses/update.json";
         const method = "POST";
         
-        // Create the post parameters - the status parameter must be properly encoded
-        const tweetText = requestBody.content;
+        // Post parameters - only include status and not media for simplicity
         const postParams = {
-          status: tweetText
+          status: requestBody.content
         };
         
-        // We'll generate the OAuth header with post parameters for signature
+        // Generate OAuth header with the post parameters included for signature
         const oauthHeader = generateOAuthHeader(method, baseUrl, postParams);
         
-        // For Twitter's API, we use x-www-form-urlencoded format
-        const formData = new URLSearchParams();
-        formData.append('status', tweetText);
-        
-        console.log('[TWITTER-API] Sending tweet using form data');
+        console.log('[TWITTER-API] Tweet content with OAuth 1.0a:', postParams.status.substring(0, 50) + '...');
         console.log('[TWITTER-API] OAuth Header:', oauthHeader);
         
-        // Use the correct format for Twitter's API
+        // Convert post parameters to URL-encoded form data string
+        const formData = new URLSearchParams();
+        for (const [key, value] of Object.entries(postParams)) {
+          formData.append(key, value);
+        }
+        
         const response = await fetch(baseUrl, {
           method: method,
           headers: {
@@ -291,14 +342,36 @@ serve(async (req) => {
         
         const responseText = await response.text();
         console.log('[TWITTER-API] Tweet response status:', response.status);
-        console.log('[TWITTER-API] Tweet response body:', responseText.substring(0, 200));
+        console.log('[TWITTER-API] Tweet response body:', responseText.substring(0, 500));
         
         if (!response.ok) {
           console.error('[TWITTER-API] Tweet posting error:', response.status, responseText);
           throw new Error(`Failed to post tweet: ${response.status} ${responseText}`);
         }
         
-        const tweetData = JSON.parse(responseText);
+        let tweetData;
+        try {
+          tweetData = JSON.parse(responseText);
+        } catch (e) {
+          console.error('[TWITTER-API] Error parsing tweet response:', e);
+          throw new Error(`Failed to parse tweet response: ${responseText}`);
+        }
+        
+        // Store successful tweet in database
+        try {
+          await supabaseClient
+            .from('social_posts')
+            .insert({
+              user_id: user.id,
+              platform: 'twitter',
+              content: requestBody.content,
+              external_id: tweetData.id_str,
+              posted_at: new Date().toISOString()
+            });
+        } catch (dbError) {
+          console.error('[TWITTER-API] Error storing tweet in database:', dbError);
+          // Continue even if we can't update the DB
+        }
         
         return new Response(JSON.stringify({
           success: true,

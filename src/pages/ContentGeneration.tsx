@@ -13,7 +13,7 @@ import ScheduleDialog from "@/components/ui/ScheduleDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { publishToTwitter } from "@/components/ui/RefreshDataButton";
+import { publishToTwitter, checkTwitterConnection } from "@/components/ui/RefreshDataButton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import TwitterRateLimitInfo from "@/components/ui/TwitterRateLimitInfo";
 
@@ -110,128 +110,140 @@ const ContentGeneration: React.FC = () => {
     }
   };
 
-  const handlePublish = async () => {
-    if (!generatedContent || !await checkAuth()) return;
+const handlePublish = async () => {
+  if (!generatedContent || !await checkAuth()) return;
+  
+  try {
+    console.log("Publishing content with user:", user?.id);
     
-    try {
-      console.log("Publishing content with user:", user?.id);
+    if (selectedPlatform === 'twitter') {
+      toast.loading('Publishing to Twitter...');
       
-      if (selectedPlatform === 'twitter') {
-        toast.loading('Publishing to Twitter...');
-        
-        try {
-          const verifyResponse = await supabase.functions.invoke('twitter-api', {
-            method: 'POST',
-            headers: {
-              path: '/verify-credentials',
-            }
-          });
-          
-          if (verifyResponse.error) {
-            if (verifyResponse.error.message && verifyResponse.error.message.includes('rate limit')) {
-              toast.dismiss();
-              toast.error('Twitter API rate limit exceeded', {
-                description: 'Twitter has temporarily limited our API requests. Please try again in a few minutes.'
-              });
-              return;
-            }
-            
-            console.error('Twitter credentials verification failed:', verifyResponse.error);
-            toast.dismiss();
-            toast.error('Twitter credential verification failed', {
-              description: verifyResponse.error.message || 'Could not verify Twitter credentials'
-            });
-            return;
+      // First check if we have a valid Twitter connection
+      const isConnected = await checkTwitterConnection();
+      
+      if (!isConnected) {
+        toast.dismiss();
+        toast.error('Twitter connection not found or invalid', {
+          description: 'Please connect your Twitter account in the Settings page first.'
+        });
+        navigate('/settings?connect=twitter');
+        return;
+      }
+      
+      try {
+        const verifyResponse = await supabase.functions.invoke('twitter-api', {
+          method: 'POST',
+          headers: {
+            path: '/verify-credentials',
           }
-          
-          if (verifyResponse.data && verifyResponse.data.rateLimited) {
+        });
+        
+        if (verifyResponse.error) {
+          if (verifyResponse.error.message && verifyResponse.error.message.includes('rate limit')) {
             toast.dismiss();
-            toast.error('Twitter API rate limit exceeded', {
-              description: 'Twitter has temporarily limited our API requests. Please try again later.'
-            });
-            return;
-          }
-          
-          console.log('Twitter credentials verification result:', verifyResponse.data);
-        } catch (verifyError) {
-          console.error('Error during Twitter credentials verification:', verifyError);
-        }
-        
-        const twitterResult = await publishToTwitter(generatedContent, mediaUrl);
-        
-        if (!twitterResult.success) {
-          toast.dismiss();
-          
-          if (twitterResult.error?.includes('rate limit') || twitterResult.error?.includes('429')) {
             toast.error('Twitter API rate limit exceeded', {
               description: 'Twitter has temporarily limited our API requests. Please try again in a few minutes.'
             });
             return;
           }
           
-          if (twitterResult.error?.includes('permission') || 
-              twitterResult.error?.includes('Forbidden') || 
-              twitterResult.error?.includes('403')) {
-            
-            setErrorDetails({
-              title: 'Twitter API Permission Error',
-              message: 'Your Twitter app does not have write permissions or your access tokens need to be regenerated.',
-              instructions: twitterResult.instructions || 
-                'After updating permissions in the Twitter Developer Portal to "Read and write", you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings.'
-            });
-            setIsErrorDialogOpen(true);
-          } else if (twitterResult.error?.includes('Edge Function')) {
-            setErrorDetails({
-              title: 'Twitter Edge Function Error',
-              message: 'The Twitter integration function encountered an error.',
-              instructions: 'Please check the Supabase edge function logs for detailed error information. You may need to update environment variables or fix permission issues.'
-            });
-            setIsErrorDialogOpen(true);
-          } else {
-            toast.error('Failed to publish to Twitter', {
-              description: twitterResult.error || twitterResult.message,
-            });
-          }
+          console.error('Twitter credentials verification failed:', verifyResponse.error);
+          toast.dismiss();
+          toast.error('Twitter credential verification failed', {
+            description: verifyResponse.error.message || 'Could not verify Twitter credentials'
+          });
           return;
         }
         
-        toast.success('Successfully published to Twitter!');
+        if (verifyResponse.data && verifyResponse.data.rateLimited) {
+          toast.dismiss();
+          toast.error('Twitter API rate limit exceeded', {
+            description: 'Twitter has temporarily limited our API requests. Please try again later.'
+          });
+          return;
+        }
+        
+        console.log('Twitter credentials verification result:', verifyResponse.data);
+      } catch (verifyError) {
+        console.error('Error during Twitter credentials verification:', verifyError);
       }
       
-      if (!contentId) {
-        const id = await saveContent({
-          content: generatedContent,
-          mediaUrl,
-          contentType: selectedContentType,
-          platform: selectedPlatform,
-          intent: selectedIntent,
-          status: 'published'
-        });
-        setContentId(id);
-      } else {
-        await publishContent(contentId);
-      }
+      const twitterResult = await publishToTwitter(generatedContent, mediaUrl);
       
-      toast.success("Content published", {
-        description: "Your content has been successfully published!"
-      });
-      
-      navigate("/pending-content");
-    } catch (error) {
-      console.error("Error publishing content:", error);
-      
-      if (error instanceof Error && error.message.includes('rate limit')) {
-        toast.error('Rate limit exceeded', {
-          description: 'Twitter has temporarily limited our API requests. Please try again in a few minutes.'
-        });
+      if (!twitterResult.success) {
+        toast.dismiss();
+        
+        if (twitterResult.error?.includes('rate limit') || twitterResult.error?.includes('429')) {
+          toast.error('Twitter API rate limit exceeded', {
+            description: 'Twitter has temporarily limited our API requests. Please try again in a few minutes.'
+          });
+          return;
+        }
+        
+        if (twitterResult.error?.includes('permission') || 
+            twitterResult.error?.includes('Forbidden') || 
+            twitterResult.error?.includes('403')) {
+          
+          setErrorDetails({
+            title: 'Twitter API Permission Error',
+            message: 'Your Twitter app does not have write permissions or your access tokens need to be regenerated.',
+            instructions: twitterResult.instructions || 
+              'After updating permissions in the Twitter Developer Portal to "Read and write", you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings.'
+          });
+          setIsErrorDialogOpen(true);
+        } else if (twitterResult.error?.includes('Edge Function')) {
+          setErrorDetails({
+            title: 'Twitter Edge Function Error',
+            message: 'The Twitter integration function encountered an error.',
+            instructions: 'Please check the Supabase edge function logs for detailed error information. You may need to update environment variables or fix permission issues.'
+          });
+          setIsErrorDialogOpen(true);
+        } else {
+          toast.error('Failed to publish to Twitter', {
+            description: twitterResult.error || twitterResult.message,
+          });
+        }
         return;
       }
       
-      toast.error("Publishing failed", {
-        description: error instanceof Error ? error.message : "An unexpected error occurred."
-      });
+      toast.success('Successfully published to Twitter!');
     }
-  };
+    
+    if (!contentId) {
+      const id = await saveContent({
+        content: generatedContent,
+        mediaUrl,
+        contentType: selectedContentType,
+        platform: selectedPlatform,
+        intent: selectedIntent,
+        status: 'published'
+      });
+      setContentId(id);
+    } else {
+      await publishContent(contentId);
+    }
+    
+    toast.success("Content published", {
+      description: "Your content has been successfully published!"
+    });
+    
+    navigate("/pending-content");
+  } catch (error) {
+    console.error("Error publishing content:", error);
+    
+    if (error instanceof Error && error.message.includes('rate limit')) {
+      toast.error('Rate limit exceeded', {
+        description: 'Twitter has temporarily limited our API requests. Please try again in a few minutes.'
+      });
+      return;
+    }
+    
+    toast.error("Publishing failed", {
+      description: error instanceof Error ? error.message : "An unexpected error occurred."
+    });
+  }
+};
 
   const handleScheduleClick = () => {
     if (!checkAuth()) return;
