@@ -67,6 +67,8 @@ export const callTwitterApi = async (path: string, body?: any) => {
     throw new Error('Authentication required to access Twitter API');
   }
   
+  console.log(`Calling Twitter API: ${path} with OAuth 1.0a`);
+  
   return supabase.functions.invoke('twitter-api', {
     method: 'POST',
     headers: {
