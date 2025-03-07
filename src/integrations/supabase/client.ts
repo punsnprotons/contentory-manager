@@ -58,3 +58,21 @@ export const getAccessToken = async () => {
   const { data: { session } } = await supabase.auth.getSession();
   return session?.access_token || null;
 };
+
+// Helper to call Twitter API with proper headers
+export const callTwitterApi = async (path: string, body?: any) => {
+  const accessToken = await getAccessToken();
+  
+  if (!accessToken) {
+    throw new Error('Authentication required to access Twitter API');
+  }
+  
+  return supabase.functions.invoke('twitter-api', {
+    method: 'POST',
+    headers: {
+      path,
+      Authorization: `Bearer ${accessToken}`
+    },
+    body
+  });
+};
