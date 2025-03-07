@@ -172,16 +172,41 @@ serve(async (req) => {
 
     console.log(`[TWITTER-API] User authenticated: ${user.id}`);
 
-    // Find the user in the database
-    const { data: userData, error: userError } = await supabaseClient
+    // Find the user in the database - handle the case where user record doesn't exist
+    let userData;
+    const { data: existingUser, error: userError } = await supabaseClient
       .from('users')
       .select('id')
       .eq('auth_id', user.id)
-      .single();
+      .maybeSingle();
 
-    if (userError || !userData) {
+    if (userError && userError.code !== 'PGRST116') {
       console.error('[TWITTER-API] Error finding user in database:', userError);
-      throw new Error('User not found in database');
+      throw new Error('Error querying user in database');
+    }
+
+    if (!existingUser) {
+      // Create the user if they don't exist
+      console.log(`[TWITTER-API] User ${user.id} not found in database, creating new record`);
+      const { data: newUser, error: insertError } = await supabaseClient
+        .from('users')
+        .insert({
+          auth_id: user.id,
+          email: user.email
+        })
+        .select('id')
+        .single();
+
+      if (insertError || !newUser) {
+        console.error('[TWITTER-API] Error creating user in database:', insertError);
+        throw new Error('Failed to create user record');
+      }
+      
+      userData = newUser;
+      console.log(`[TWITTER-API] Created new user record with ID: ${userData.id}`);
+    } else {
+      userData = existingUser;
+      console.log(`[TWITTER-API] Found existing user record with ID: ${userData.id}`);
     }
 
     console.log(`[TWITTER-API] Publishing content with user: ${user.id} (OAuth 1.0a)`);
