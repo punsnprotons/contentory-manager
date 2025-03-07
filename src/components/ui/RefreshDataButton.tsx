@@ -212,13 +212,13 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
       
       // Check for specific error conditions
       if (errorMessage.includes('403') || 
-          errorMessage.includes('Forbidden') ||
+          errorMessage.includes('Forbidden') || 
           errorMessage.includes('permission')) {
         return {
           success: false,
           message: 'Twitter API Permission Error',
           error: errorMessage,
-          instructions: "After updating permissions in the Twitter Developer Portal to 'Read and write', you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings."
+          instructions: "Make sure your Twitter app has 'Read and write' permissions enabled in the Twitter Developer Portal settings, as shown in the screenshot provided. After updating permissions, you may need to regenerate your tokens."
         };
       }
       
