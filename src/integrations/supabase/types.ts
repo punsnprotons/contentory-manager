@@ -461,6 +461,7 @@ export type Database = {
           connected: boolean
           created_at: string
           id: string
+          last_verified: string | null
           platform: Database["public"]["Enums"]["social_platform"]
           profile_image: string | null
           refresh_token: string | null
@@ -476,6 +477,7 @@ export type Database = {
           connected?: boolean
           created_at?: string
           id?: string
+          last_verified?: string | null
           platform: Database["public"]["Enums"]["social_platform"]
           profile_image?: string | null
           refresh_token?: string | null
@@ -491,6 +493,7 @@ export type Database = {
           connected?: boolean
           created_at?: string
           id?: string
+          last_verified?: string | null
           platform?: Database["public"]["Enums"]["social_platform"]
           profile_image?: string | null
           refresh_token?: string | null
