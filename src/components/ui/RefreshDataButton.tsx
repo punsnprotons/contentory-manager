@@ -1,9 +1,10 @@
-
+<lov-codelov-code>
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
 import { supabase, getCurrentUser } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { SocialPlatform } from '@/types'; // Add this import
 
 interface RefreshDataButtonProps {
   className?: string;
@@ -67,7 +68,7 @@ export const checkTwitterConnection = async (): Promise<boolean> => {
       .from('platform_connections')
       .select('connected, last_verified, username')
       .eq('user_id', user.id)
-      .eq('platform', 'twitter' as SocialPlatform) // Cast as SocialPlatform
+      .eq('platform', 'twitter' as SocialPlatform)
       .maybeSingle();
     
     console.log('Platform connections query result:', connections, connectionsError);
@@ -121,7 +122,7 @@ export const checkTwitterConnection = async (): Promise<boolean> => {
             last_verified: new Date().toISOString()
           })
           .eq('user_id', user.id)
-          .eq('platform', 'twitter' as SocialPlatform); // Cast as SocialPlatform
+          .eq('platform', 'twitter' as SocialPlatform);
           
         console.log('Updated Twitter connection status to disconnected');
       }
@@ -139,7 +140,7 @@ export const checkTwitterConnection = async (): Promise<boolean> => {
         last_verified: new Date().toISOString()
       })
       .eq('user_id', user.id)
-      .eq('platform', 'twitter' as SocialPlatform); // Cast as SocialPlatform
+      .eq('platform', 'twitter' as SocialPlatform);
     
     console.log('Twitter connection verified successfully');
     return true;
@@ -487,3 +488,4 @@ const RefreshDataButton: React.FC<RefreshDataButtonProps> = ({
 };
 
 export default RefreshDataButton;
+</lov-code>
