@@ -314,11 +314,15 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
     // Since we've already verified the connection above, we can proceed with publishing
     console.log('Twitter credentials already verified. Proceeding with tweet...');
     
+    // Get access token for auth
+    const accessToken = await getAccessToken();
+    
     // Now proceed with publishing the tweet using OAuth 1.0a
     const response = await supabase.functions.invoke('twitter-api', {
       method: 'POST',
       headers: {
         path: '/tweet',
+        Authorization: `Bearer ${accessToken}`
       },
       body: {
         content: content,
@@ -366,7 +370,7 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
           success: false,
           message: 'Twitter API Permission Error',
           error: errorMessage,
-          instructions: "Make sure your Twitter app has 'Read and write' permissions enabled in the Twitter Developer Portal settings, as shown in the screenshot provided. After updating permissions, you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings."
+          instructions: "Make sure your Twitter app has 'Read and write' permissions enabled in the Twitter Developer Portal settings. After updating permissions, you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings."
         };
       }
       

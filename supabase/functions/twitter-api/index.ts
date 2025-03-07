@@ -54,7 +54,7 @@ function generateOAuthSignature(
   consumerSecret: string,
   tokenSecret: string
 ): string {
-  // Combine OAuth parameters with post parameters for signature generation
+  // CRITICAL FIX: Combine OAuth parameters with POST parameters for signature base string
   const allParams = { ...oauthParams, ...postParams };
   
   // Sort parameters alphabetically by key
