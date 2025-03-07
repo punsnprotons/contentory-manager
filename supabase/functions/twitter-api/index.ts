@@ -18,7 +18,7 @@ const twitterApiKeys = [
   "TWITTER_ACCESS_TOKEN_SECRET"
 ];
 
-// Log partial credentials for debugging without revealing full values
+// Log detailed information about the credentials for debugging
 for (const key of twitterApiKeys) {
   const value = Deno.env.get(key);
   const valueExists = !!value;
@@ -27,8 +27,9 @@ for (const key of twitterApiKeys) {
     ? value.substring(0, 4) + "..." + (valueLength > 8 ? value.substring(valueLength - 4) : "") 
     : "not set";
   const containsSpaces = valueExists ? value.includes(" ") : false;
+  const containsQuotes = valueExists ? value.includes('"') || value.includes("'") : false;
   
-  console.log(`[TWITTER-API] ${key}: ${valueExists ? "SET" : "NOT SET"}, Length: ${valueLength}, Pattern: ${valuePattern}, Contains spaces: ${containsSpaces}`);
+  console.log(`[TWITTER-API] ${key}: ${valueExists ? "SET" : "NOT SET"}, Length: ${valueLength}, Pattern: ${valuePattern}, Contains spaces: ${containsSpaces}, Contains quotes: ${containsQuotes}`);
   
   // Additional format validation for specific keys
   if (key === "TWITTER_API_KEY" && valueExists) {
