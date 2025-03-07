@@ -103,22 +103,40 @@ function generateOAuthHeader(method: string, url: string, params: Record<string,
   );
 }
 
-// Auth function to initiate Twitter OAuth 1.0a flow
-async function initiateTwitterAuth(userId: string): Promise<{ authURL: string }> {
-  console.log("[TWITTER-INTEGRATION] Initiating Twitter OAuth 1.0a auth for user:", userId);
+// Auth function to verify Twitter OAuth 1.0a credentials
+async function verifyTwitterCredentials(): Promise<{ verified: boolean, user?: any }> {
+  console.log("[TWITTER-INTEGRATION] Verifying Twitter OAuth 1.0a credentials");
   
-  // For OAuth 1.0a, we'll generate a direct Twitter auth URL for the user
-  // Since we're using the app's credentials directly
-  
-  // Redirect to the Twitter OAuth callback URL which will be handled by the frontend
-  const callbackUrl = `${Deno.env.get('SUPABASE_URL') || ''}/functions/v1/twitter-integration/callback`;
-  console.log("[TWITTER-INTEGRATION] CALLBACK_URL:", callbackUrl);
-  
-  // Generate a simple login URL using the app credentials
-  // In OAuth 1.0a with the direct token approach, we can just send the user to Twitter
-  const authURL = "https://twitter.com/home";
-  
-  return { authURL };
+  try {
+    const baseUrl = "https://api.twitter.com/1.1/account/verify_credentials.json";
+    const method = "GET";
+    const oauthHeader = generateOAuthHeader(method, baseUrl);
+    
+    const response = await fetch(baseUrl, {
+      method: method,
+      headers: {
+        "Authorization": oauthHeader,
+        "Content-Type": "application/json",
+      }
+    });
+    
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`[TWITTER-INTEGRATION] Failed to verify credentials: ${response.status} ${text}`);
+      return { verified: false };
+    }
+    
+    const userData = await response.json();
+    console.log("[TWITTER-INTEGRATION] OAuth 1.0a credentials verified successfully");
+    
+    return {
+      verified: true,
+      user: userData
+    };
+  } catch (error) {
+    console.error('[TWITTER-INTEGRATION] Error verifying credentials:', error);
+    return { verified: false };
+  }
 }
 
 // Main handler function
@@ -182,7 +200,7 @@ serve(async (req) => {
           throw new Error('Failed to create user in database');
         }
         
-        userData = newUser;
+        console.log('[TWITTER-INTEGRATION] Created new user in database:', newUser);
       } else {
         console.error('[TWITTER-INTEGRATION] Error finding user in database:', userError);
         throw new Error('User not found in database');
@@ -191,14 +209,22 @@ serve(async (req) => {
 
     // Handle the Twitter API calls based on the path
     if (path === '/auth') {
-      console.log('[TWITTER-INTEGRATION] Processing auth request with OAuth 1.0a');
-      const requestBody = await req.json();
+      console.log('[TWITTER-INTEGRATION] Processing auth verification with OAuth 1.0a');
       
-      const authResult = await initiateTwitterAuth(user.id);
+      // With OAuth 1.0a, we just verify credentials directly using app tokens
+      const verifyResult = await verifyTwitterCredentials();
+      
+      if (!verifyResult.verified) {
+        console.error('[TWITTER-INTEGRATION] Failed to verify Twitter credentials');
+        throw new Error('Twitter credentials verification failed');
+      }
+      
+      console.log('[TWITTER-INTEGRATION] Twitter credentials verified successfully');
       
       return new Response(JSON.stringify({
         success: true,
-        ...authResult,
+        verified: true,
+        user: verifyResult.user,
         oauth: "1.0a"
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
@@ -138,8 +137,7 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
       };
     }
     
-    console.log('Publishing content to Twitter:', content);
-    console.log('Using Twitter API endpoint for publishing');
+    console.log('Publishing content to Twitter using OAuth 1.0a:', content);
     
     // Add diagnostic logging for the session token
     console.log('Session available:', !!session, 'Token length:', session.access_token.length);
@@ -159,7 +157,8 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
         return {
           success: false,
           message: 'Twitter credentials verification failed',
-          error: verifyResponse.error.message || 'Unknown error during verification'
+          error: verifyResponse.error.message || 'Unknown error during verification',
+          instructions: "Make sure your Twitter API credentials are correctly set in the Supabase Edge Function secrets, and that your app has 'Read and Write' permissions."
         };
       }
       
@@ -168,7 +167,8 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
         return {
           success: false,
           message: 'Twitter credentials are invalid or insufficient permissions',
-          error: verifyResponse.data?.message || 'Verification failed'
+          error: verifyResponse.data?.message || 'Verification failed',
+          instructions: "Make sure your Twitter app has 'Read and write' permissions enabled in the Twitter Developer Portal settings."
         };
       }
       
@@ -177,7 +177,7 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
       console.error('Error during Twitter credentials verification:', verifyError);
     }
     
-    // Now proceed with publishing the tweet
+    // Now proceed with publishing the tweet using OAuth 1.0a
     const response = await supabase.functions.invoke('twitter-api', {
       method: 'POST',
       headers: {
@@ -185,7 +185,8 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
       },
       body: {
         content: content,
-        mediaUrl: mediaUrl
+        mediaUrl: mediaUrl,
+        oauth1: true  // Explicitly signal OAuth 1.0a
       }
     });
     

@@ -239,7 +239,8 @@ export class TwitterApiService {
       // Track this request
       TwitterApiService.trackRequest(endpoint);
       
-      // Call the Twitter API edge function with auth endpoint
+      // With OAuth 1.0a, we directly verify the credentials instead of going through an auth flow
+      // Since we're using app-level credentials, not user credentials
       const { data, error } = await supabase.functions.invoke('twitter-integration', {
         method: 'POST',
         headers: {
@@ -247,8 +248,8 @@ export class TwitterApiService {
         },
         body: { 
           endpoint: 'auth',
-          oauth1: true, // Signal that we're using OAuth 1.0a
-          timestamp: Date.now() // Add timestamp to avoid caching
+          oauth1: true,
+          timestamp: Date.now()
         }
       });
       
@@ -277,7 +278,7 @@ export class TwitterApiService {
         throw new Error('Failed to initiate Twitter authentication: ' + error.message);
       }
       
-      if (!data || !data.success || !data.authURL) {
+      if (!data || !data.success) {
         console.error('TwitterApiService: Invalid response format:', data);
         
         // Check for rate limit indicator in the response
@@ -286,20 +287,21 @@ export class TwitterApiService {
           throw new Error(data.error || `Twitter API rate limit exceeded. Please try again in ${waitTime}.`);
         }
         
-        throw new Error('Failed to get auth URL');
+        throw new Error('Failed to verify Twitter credentials');
       }
       
       // Cache the successful response
       TwitterApiService.trackRequest(endpoint, data);
       
-      // Return the auth URL to redirect the user
-      return data.authURL;
+      // In OAuth 1.0a, we don't need to redirect the user
+      // Just return a success message or URL to refresh the page
+      return window.location.href;
     } catch (error) {
       console.error('TwitterApiService: Error initiating Twitter auth:', error);
       if (error instanceof Error) {
         throw error;
       }
-      throw new Error('Failed to get auth URL');
+      throw new Error('Failed to verify Twitter credentials');
     }
   }
   

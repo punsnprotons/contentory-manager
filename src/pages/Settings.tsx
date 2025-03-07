@@ -226,7 +226,7 @@ const Settings = () => {
     try {
       console.log("Settings: Connecting Twitter with OAuth 1.0a");
       const twitterService = new TwitterApiService(session.user.id);
-      toast.info('Setting up Twitter authentication...');
+      toast.info('Verifying Twitter credentials...');
       
       try {
         const verificationResult = await twitterService.verifyCredentials();
@@ -238,7 +238,7 @@ const Settings = () => {
           
           await loadConnections();
         } else {
-          toast.error('Failed to connect Twitter. Please check your API credentials.');
+          toast.error('Failed to connect Twitter. Please check your API credentials in Supabase.');
         }
       } catch (authError) {
         console.error('Error connecting Twitter:', authError);
