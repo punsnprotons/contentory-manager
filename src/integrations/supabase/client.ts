@@ -16,6 +16,8 @@ export const supabase = createClient<Database>(
     auth: {
       persistSession: true,
       autoRefreshToken: true,
+      detectSessionInUrl: true, // This is needed to handle OAuth redirects properly
+      flowType: 'pkce', // Use PKCE flow for better security
     },
     realtime: {
       params: {
@@ -24,6 +26,11 @@ export const supabase = createClient<Database>(
     },
     db: {
       schema: 'public',
+    },
+    global: {
+      headers: {
+        'X-Client-Info': 'lovable-app',
+      },
     },
   }
 );
@@ -44,4 +51,10 @@ export const isAuthenticated = async () => {
 export const getCurrentSession = async () => {
   const { data: { session } } = await supabase.auth.getSession();
   return session;
+};
+
+// Helper for getting the current access token
+export const getAccessToken = async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token || null;
 };

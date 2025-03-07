@@ -59,4 +59,6 @@ redirect_uri = "https://fxzamjowvpnyuxthusib.supabase.co/auth/v1/callback"
 
 [functions]
 [functions.twitter-integration]
-verify_jwt = false
+verify_jwt = true
+[functions.twitter-api]
+verify_jwt = true

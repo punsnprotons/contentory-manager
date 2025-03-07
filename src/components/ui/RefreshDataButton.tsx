@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
-import { supabase, getCurrentUser } from '@/integrations/supabase/client';
+import { supabase, getCurrentUser, getAccessToken } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { SocialPlatform } from '@/types';
 
@@ -71,10 +72,13 @@ export const checkTwitterConnection = async (): Promise<boolean> => {
     
     // If it's been more than 24 hours or no verification time, verify the connection again
     console.log('Verifying Twitter connection...');
+    const accessToken = await getAccessToken();
+    
     const { data: verifyResult, error: verifyError } = await supabase.functions.invoke('twitter-integration', {
       method: 'POST',
       headers: {
         path: '/verify',
+        Authorization: `Bearer ${accessToken}`
       }
     });
     
@@ -123,8 +127,9 @@ export const checkTwitterConnection = async (): Promise<boolean> => {
 export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Promise<RefreshResponse> => {
   try {
     const user = await getCurrentUser();
+    const accessToken = await getAccessToken();
     
-    if (!user) {
+    if (!user || !accessToken) {
       toast.error('You need to be logged in to refresh data');
       return {
         success: false,
@@ -187,7 +192,7 @@ export const triggerTwitterRefresh = async (retryCount = 0, maxRetries = 2): Pro
       method: 'POST',
       body: { userId: user.id },
       headers: {
-        Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+        Authorization: `Bearer ${accessToken}`
       }
     });
     
