@@ -1,21 +1,19 @@
 
-// Only update the beginning of the file with better debugging
-
+// Update the Twitter API edge function to use OAuth 2.0
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Enhanced debugging for environment variables
-console.log("[TWITTER-API] Function starting");
+console.log("[TWITTER-API] Function starting with OAuth 2.0");
 console.log("[TWITTER-API] SUPABASE_URL present:", !!Deno.env.get('SUPABASE_URL'), "Length:", Deno.env.get('SUPABASE_URL')?.length || 0);
 console.log("[TWITTER-API] SUPABASE_ANON_KEY present:", !!Deno.env.get('SUPABASE_ANON_KEY'), "Length:", Deno.env.get('SUPABASE_ANON_KEY')?.length || 0);
 
 // Check if the Twitter API keys are properly set in the environment with more detail
-console.log("[TWITTER-API] Checking Twitter API keys:");
+console.log("[TWITTER-API] Checking Twitter API OAuth 2.0 keys:");
 const twitterApiKeys = [
-  "TWITTER_API_KEY", 
-  "TWITTER_API_SECRET", 
-  "TWITTER_ACCESS_TOKEN", 
-  "TWITTER_ACCESS_TOKEN_SECRET"
+  "TWITTER_CLIENT_ID", 
+  "TWITTER_CLIENT_SECRET", 
+  "TWITTER_BEARER_TOKEN"
 ];
 
 // Log detailed information about the credentials for debugging
@@ -32,14 +30,12 @@ for (const key of twitterApiKeys) {
   console.log(`[TWITTER-API] ${key}: ${valueExists ? "SET" : "NOT SET"}, Length: ${valueLength}, Pattern: ${valuePattern}, Contains spaces: ${containsSpaces}, Contains quotes: ${containsQuotes}`);
   
   // Additional format validation for specific keys
-  if (key === "TWITTER_API_KEY" && valueExists) {
-    console.log(`[TWITTER-API] ${key} format valid:`, /^[a-zA-Z0-9]{25,}$/.test(value));
-  } else if (key === "TWITTER_API_SECRET" && valueExists) {
-    console.log(`[TWITTER-API] ${key} format valid:`, /^[a-zA-Z0-9]{40,}$/.test(value));
-  } else if (key === "TWITTER_ACCESS_TOKEN" && valueExists) {
-    console.log(`[TWITTER-API] ${key} format valid:`, /^\d+-[a-zA-Z0-9]{40,}$/.test(value));
-  } else if (key === "TWITTER_ACCESS_TOKEN_SECRET" && valueExists) {
-    console.log(`[TWITTER-API] ${key} format valid:`, /^[a-zA-Z0-9]{35,}$/.test(value));
+  if (key === "TWITTER_CLIENT_ID" && valueExists) {
+    console.log(`[TWITTER-API] ${key} format valid:`, /^[a-zA-Z0-9]{20,}$/.test(value));
+  } else if (key === "TWITTER_CLIENT_SECRET" && valueExists) {
+    console.log(`[TWITTER-API] ${key} format valid:`, /^[a-zA-Z0-9_-]{35,}$/.test(value));
+  } else if (key === "TWITTER_BEARER_TOKEN" && valueExists) {
+    console.log(`[TWITTER-API] ${key} format valid:`, /^[A-Za-z0-9%]{80,}$/.test(value));
   }
 }
 
@@ -68,7 +64,7 @@ serve(async (req) => {
       throw new Error('Missing path header');
     }
 
-    console.log(`[TWITTER-API] Processing request for path: ${path}`);
+    console.log(`[TWITTER-API] Processing request for path: ${path} (OAuth 2.0)`);
 
     // Create a Supabase client
     const supabaseClient = createClient(
@@ -101,11 +97,11 @@ serve(async (req) => {
       throw new Error('User not found in database');
     }
 
-    console.log(`[TWITTER-API] Publishing content with user: ${user.id}`);
+    console.log(`[TWITTER-API] Publishing content with user: ${user.id} (OAuth 2.0)`);
 
     // Handle new rate-limit-status endpoint
     if (path === '/rate-limit-status') {
-      console.log('[TWITTER-API] Fetching rate limit status');
+      console.log('[TWITTER-API] Fetching rate limit status with OAuth 2.0');
       
       try {
         const { data, error } = await supabaseClient.functions.invoke(
@@ -113,7 +109,8 @@ serve(async (req) => {
           {
             method: 'POST',
             body: { 
-              endpoint: 'rate-limits'
+              endpoint: 'rate-limits',
+              oauth2: true
             }
           }
         );
@@ -134,36 +131,37 @@ serve(async (req) => {
 
     // Verify Twitter environment variables
     if (path === '/verify-credentials') {
-      console.log('[TWITTER-API] Verifying Twitter credentials');
+      console.log('[TWITTER-API] Verifying Twitter OAuth 2.0 credentials');
       try {
         const { data, error } = await supabaseClient.functions.invoke(
           'twitter-integration',
           {
             method: 'POST',
             body: { 
-              endpoint: 'verify'
+              endpoint: 'verify',
+              oauth2: true
             }
           }
         );
 
         if (error) {
-          console.error('[TWITTER-API] Error verifying Twitter credentials:', error);
+          console.error('[TWITTER-API] Error verifying Twitter OAuth 2.0 credentials:', error);
           throw new Error(`Failed to verify Twitter credentials: ${error.message}`);
         }
 
-        console.log('[TWITTER-API] Twitter credentials verified:', data?.verified);
+        console.log('[TWITTER-API] Twitter OAuth 2.0 credentials verified:', data?.verified);
         return new Response(JSON.stringify(data), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       } catch (error) {
-        console.error('[TWITTER-API] Unexpected error during verification:', error);
+        console.error('[TWITTER-API] Unexpected error during OAuth 2.0 verification:', error);
         throw error;
       }
     }
 
     // Handle auth initialization endpoint
     if (path === '/auth') {
-      console.log('[TWITTER-API] Initializing Twitter authentication');
+      console.log('[TWITTER-API] Initializing Twitter OAuth 2.0 authentication');
       try {
         // Forward the request to the twitter-integration function with enhanced error handling
         try {
@@ -172,7 +170,8 @@ serve(async (req) => {
             {
               method: 'POST',
               body: { 
-                endpoint: 'auth'
+                endpoint: 'auth',
+                oauth2: true
               }
             }
           );
@@ -188,7 +187,7 @@ serve(async (req) => {
             throw new Error('Invalid response from twitter-integration function');
           }
 
-          console.log('[TWITTER-API] Twitter auth initialization successful, authURL received');
+          console.log('[TWITTER-API] Twitter OAuth 2.0 auth initialization successful, authURL received');
           return new Response(JSON.stringify(data), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
@@ -197,7 +196,7 @@ serve(async (req) => {
           throw new Error(`Failed to invoke twitter-integration function: ${invokeError.message}`);
         }
       } catch (error) {
-        console.error('[TWITTER-API] Unexpected error during auth initialization:', error);
+        console.error('[TWITTER-API] Unexpected error during OAuth 2.0 auth initialization:', error);
         throw error;
       }
     }
@@ -207,7 +206,7 @@ serve(async (req) => {
       // For tweet endpoint, forward the request to the twitter-integration function
       const requestBody = await req.json();
       
-      console.log('[TWITTER-API] Tweet content:', requestBody.content.substring(0, 50) + (requestBody.content.length > 50 ? '...' : ''));
+      console.log('[TWITTER-API] Tweet content with OAuth 2.0:', requestBody.content.substring(0, 50) + (requestBody.content.length > 50 ? '...' : ''));
       
       try {
         // Forward the request to the twitter-integration function
@@ -217,13 +216,14 @@ serve(async (req) => {
             method: 'POST',
             body: { 
               endpoint: 'tweet',
-              text: requestBody.content 
+              text: requestBody.content,
+              oauth2: true
             }
           }
         );
 
         if (error) {
-          console.error('[TWITTER-API] Error calling twitter-integration function:', error);
+          console.error('[TWITTER-API] Error calling twitter-integration function with OAuth 2.0:', error);
           
           // Check if error contains JSON with more details
           try {
@@ -231,7 +231,8 @@ serve(async (req) => {
               success: false,
               error: 'Failed to post tweet',
               originalError: error.message,
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
+              oauth2: true
             };
             
             console.error('[TWITTER-API] Full error details:', errorResponse);
@@ -258,7 +259,7 @@ serve(async (req) => {
               // Check for 403 error to give specific remediation steps
               if (error.message.includes('403') || error.message.includes('Forbidden')) {
                 errorResponse.error = 'Twitter API permission error';
-                errorResponse.remediation = 'After updating permissions in the Twitter Developer Portal to "Read and write", you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings.';
+                errorResponse.remediation = 'Make sure your Twitter app has "Read and write" permissions enabled in the User authentication settings section of the Twitter Developer Portal.';
               }
             }
             
@@ -270,16 +271,16 @@ serve(async (req) => {
             console.error('[TWITTER-API] Error parsing error details:', parseError);
           }
           
-          throw new Error(`Failed to post tweet: ${error.message}`);
+          throw new Error(`Failed to post tweet with OAuth 2.0: ${error.message}`);
         }
 
         // Return the response from the twitter-integration function
-        console.log('[TWITTER-API] Tweet posted successfully');
+        console.log('[TWITTER-API] Tweet posted successfully with OAuth 2.0');
         return new Response(JSON.stringify(data), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       } catch (tweetError) {
-        console.error('[TWITTER-API] Unexpected error posting tweet:', tweetError);
+        console.error('[TWITTER-API] Unexpected error posting tweet with OAuth 2.0:', tweetError);
         throw tweetError;
       }
     } else if (path === '/refresh') {
@@ -288,12 +289,15 @@ serve(async (req) => {
         'twitter-refresh',
         {
           method: 'POST',
-          body: { userId: userData.id }
+          body: { 
+            userId: userData.id,
+            oauth2: true 
+          }
         }
       );
 
       if (error) {
-        console.error('[TWITTER-API] Error calling twitter-refresh function:', error);
+        console.error('[TWITTER-API] Error calling twitter-refresh function with OAuth 2.0:', error);
         throw new Error(`Failed to refresh Twitter data: ${error.message}`);
       }
 
@@ -311,11 +315,11 @@ serve(async (req) => {
     let statusCode = 500;
     let instructions = undefined;
     
-    // Provide more specific error messages and instructions
+    // Provide more specific error messages and instructions for OAuth 2.0
     if (errorMessage.includes('Forbidden') || errorMessage.includes('403') || errorMessage.includes('permission')) {
       statusCode = 403;
-      errorMessage = 'Twitter API permission error: Your Twitter access tokens don\'t have write permissions. You need to generate new access tokens after enabling "Read and write" permissions.';
-      instructions = "After updating permissions in the Twitter Developer Portal to 'Read and write', you need to regenerate your access tokens and update both TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET in your Supabase project settings.";
+      errorMessage = 'Twitter API permission error: Your Twitter OAuth 2.0 app doesn\'t have write permissions. You need to ensure "Read and write" permissions are enabled.';
+      instructions = "Make sure you've enabled 'Read and write' permissions in the 'User authentication settings' section of your Twitter Developer Portal.";
     }
     
     return new Response(
@@ -324,7 +328,8 @@ serve(async (req) => {
         error: errorMessage,
         instructions,
         status: statusCode,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        oauth2: true
       }),
       {
         status: statusCode,
