@@ -554,6 +554,39 @@ export type Database = {
         }
         Relationships: []
       }
+      social_posts: {
+        Row: {
+          content: string
+          created_at: string | null
+          external_id: string | null
+          id: string
+          platform: string
+          posted_at: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          external_id?: string | null
+          id?: string
+          platform: string
+          posted_at?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          external_id?: string | null
+          id?: string
+          platform?: string
+          posted_at?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_settings: {
         Row: {
           created_at: string
