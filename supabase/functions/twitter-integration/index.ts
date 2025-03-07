@@ -173,11 +173,22 @@ serve(async (req) => {
     const path = req.headers.get('path') || '';
     console.log(`[TWITTER-INTEGRATION] Processing request for path: ${path} (OAuth 1.0a)`);
 
-    // Create a Supabase client
+    // Create a Supabase client with the authorization header
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+    const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    
+    // Create client with user's auth
     const supabaseClient = createClient<Database>(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      supabaseUrl,
+      supabaseAnonKey,
       { global: { headers: { Authorization: authHeader } } }
+    );
+    
+    // Also create an admin client with service role for when we need to bypass RLS
+    const adminClient = createClient(
+      supabaseUrl,
+      supabaseServiceRoleKey
     );
 
     // Get the user ID from the JWT token
@@ -206,55 +217,13 @@ serve(async (req) => {
       
       console.log('[TWITTER-INTEGRATION] Twitter credentials verified successfully');
       
-      // Store connection info in platform_connections table - FIX HERE
+      // Store connection info in platform_connections table - FIXED RLS ISSUES
       try {
         console.log('[TWITTER-INTEGRATION] Storing Twitter connection in database for user:', user.id);
         
-        // First check if the user exists in the users table, if not create them
-        const { data: userData, error: userError } = await supabaseClient
-          .from('users')
-          .select('id')
-          .eq('auth_id', user.id)
-          .maybeSingle();
-
-        if (userError) {
-          console.error('[TWITTER-INTEGRATION] Error finding user:', userError);
-          // Continue anyway to try to store the connection
-        }
-        
-        let userId = user.id;
-        
-        if (!userData) {
-          console.log('[TWITTER-INTEGRATION] User not found in users table, creating user entry');
-          const { error: insertError } = await supabaseClient
-            .from('users')
-            .insert({
-              auth_id: user.id,
-              email: user.email
-            });
-          
-          if (insertError) {
-            console.error('[TWITTER-INTEGRATION] Error creating user in database:', insertError);
-          } else {
-            console.log('[TWITTER-INTEGRATION] Created new user in database');
-          }
-        }
-
-        // Now store the connection - First check if one already exists
-        const { data: existingConnection, error: checkError } = await supabaseClient
-          .from('platform_connections')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('platform', 'twitter')
-          .maybeSingle();
-          
-        if (checkError && checkError.code !== 'PGRST116') {
-          console.error('[TWITTER-INTEGRATION] Error checking for existing connection:', checkError);
-        }
-        
         // Prepare the connection data
         const connectionData = {
-          user_id: userId,
+          user_id: user.id,
           platform: 'twitter',
           connected: true,
           username: verifyResult.user?.screen_name,
@@ -264,8 +233,21 @@ serve(async (req) => {
         
         console.log('[TWITTER-INTEGRATION] Connection data:', connectionData);
         
+        // First check if a connection already exists
+        const { data: existingConnection, error: checkError } = await supabaseClient
+          .from('platform_connections')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('platform', 'twitter')
+          .maybeSingle();
+          
+        if (checkError && checkError.code !== 'PGRST116') {
+          console.error('[TWITTER-INTEGRATION] Error checking for existing connection:', checkError);
+        }
+        
         let connectionResult;
         
+        // Try with the user's token first (should work with our fixed RLS)
         if (existingConnection) {
           // Update existing connection
           console.log('[TWITTER-INTEGRATION] Updating existing connection with ID:', existingConnection.id);
@@ -281,16 +263,13 @@ serve(async (req) => {
             .insert(connectionData);
         }
         
+        // Check for errors with user token approach
         if (connectionResult.error) {
-          console.error('[TWITTER-INTEGRATION] Error storing/updating connection:', connectionResult.error);
+          console.error('[TWITTER-INTEGRATION] Error with user token approach:', connectionResult.error);
           console.error('[TWITTER-INTEGRATION] Detailed error:', JSON.stringify(connectionResult.error));
           
-          // Try with service role key if needed
-          console.log('[TWITTER-INTEGRATION] Trying with service role...');
-          const adminClient = createClient(
-            Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-          );
+          // Fallback to admin client (bypass RLS)
+          console.log('[TWITTER-INTEGRATION] Trying with service role key...');
           
           if (existingConnection) {
             const { error: adminError } = await adminClient
@@ -315,7 +294,7 @@ serve(async (req) => {
             }
           }
         } else {
-          console.log('[TWITTER-INTEGRATION] Twitter connection stored/updated in database successfully');
+          console.log('[TWITTER-INTEGRATION] Twitter connection stored/updated in database successfully with user token');
         }
       } catch (dbError) {
         console.error('[TWITTER-INTEGRATION] Error storing/updating connection:', dbError);

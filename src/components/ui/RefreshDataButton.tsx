@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
@@ -33,35 +32,6 @@ export const checkTwitterConnection = async (): Promise<boolean> => {
     }
     
     console.log('Checking Twitter connection for user:', user.id);
-    
-    // First make sure the user exists in the users table
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('auth_id', user.id)
-      .maybeSingle();
-      
-    if (userError && userError.code !== 'PGRST116') {
-      console.error('Error checking user:', userError);
-    }
-    
-    if (!userData && userError?.code === 'PGRST116') {
-      // User doesn't exist, create them
-      console.log('User not found in database, creating user record');
-      const { error: createError } = await supabase
-        .from('users')
-        .insert({
-          auth_id: user.id,
-          email: user.email
-        });
-        
-      if (createError) {
-        console.error('Error creating user:', createError);
-        return false;
-      } else {
-        console.log('User created successfully in database');
-      }
-    }
     
     // Check if we have a record in platform_connections
     const { data: connections, error: connectionsError } = await supabase

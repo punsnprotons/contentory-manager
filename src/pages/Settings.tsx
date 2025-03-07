@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -34,7 +33,6 @@ const Settings = () => {
   const [rateLimited, setRateLimited] = useState(false);
   const { session } = useAuth();
   
-  // Load connections and user settings when component mounts or session changes
   useEffect(() => {
     if (session?.user) {
       console.log("Settings: Session user available, loading settings", session.user);
@@ -62,7 +60,6 @@ const Settings = () => {
     }
   }, [session]);
 
-  // Check for auth success parameter in URL
   useEffect(() => {
     const hasAuthParam = window.location.search.includes('auth=success');
 
@@ -79,7 +76,6 @@ const Settings = () => {
     }
   }, [session]);
   
-  // Listen for message events (for iframe communication)
   useEffect(() => {
     const messageHandler = (event: MessageEvent) => {
       console.log("Settings: Received message event:", event);
@@ -153,37 +149,8 @@ const Settings = () => {
         return;
       }
       
-      // First verify if the user exists in the users table
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('auth_id', session.user.id)
-        .single();
-        
-      if (userError && userError.code !== 'PGRST116') {
-        console.error('Error checking user:', userError);
-      }
-      
-      if (!userData && userError?.code === 'PGRST116') {
-        // User doesn't exist in the users table, create them
-        console.log("Settings: User not found in database, creating user record");
-        const { error: createError } = await supabase
-          .from('users')
-          .insert({
-            auth_id: session.user.id,
-            email: session.user.email
-          });
-          
-        if (createError) {
-          console.error('Error creating user:', createError);
-        } else {
-          console.log("Settings: User created successfully in database");
-        }
-      }
-      
       console.log("Settings: Checking platform connections for user:", session.user.id);
       
-      // Now load the connections
       const { data, error } = await supabase
         .from('platform_connections')
         .select('platform, connected, username, profile_image, last_verified')
@@ -287,11 +254,9 @@ const Settings = () => {
             const profileData = await twitterService.fetchProfileData();
             console.log("Settings: Profile data fetched:", profileData);
             
-            // Explicitly fetch connections again to update UI
             await loadConnections();
           } catch (profileError) {
             console.error("Error fetching profile data:", profileError);
-            // Continue even if profile fetch fails
           }
         } else {
           toast.error('Failed to connect Twitter. Please check your API credentials in Supabase.');

@@ -1,4 +1,3 @@
-
 // Import necessary modules
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -314,9 +313,6 @@ export class TwitterApiService {
     try {
       console.log('TwitterApiService: Verifying Twitter OAuth 1.0a credentials');
       
-      // First make sure user exists in users table
-      await this.ensureUserExists();
-      
       const { data, error } = await supabase.functions.invoke('twitter-integration', {
         method: 'POST',
         headers: {
@@ -339,11 +335,6 @@ export class TwitterApiService {
       if (!data || !data.verified) {
         console.log('TwitterApiService: Credentials not verified:', data);
         return false;
-      }
-      
-      // Store connection info in the database
-      if (data.user) {
-        await this.storeConnection(data.user.screen_name, data.user.profile_image_url_https);
       }
       
       console.log('TwitterApiService: OAuth 1.0a credentials verified successfully');
