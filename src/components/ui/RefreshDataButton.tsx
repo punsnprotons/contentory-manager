@@ -185,8 +185,7 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
       },
       body: {
         content: content,
-        mediaUrl: mediaUrl,
-        oauth1: true  // Explicitly signal OAuth 1.0a
+        mediaUrl: mediaUrl
       }
     });
     
@@ -212,6 +211,17 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
       }
       
       // Check for specific error conditions
+      if (errorMessage.includes('401') || 
+          errorMessage.includes('Could not authenticate you') ||
+          errorMessage.includes('32')) {
+        return {
+          success: false,
+          message: 'Twitter API Authentication Error',
+          error: errorMessage,
+          instructions: "There's an issue with your Twitter API credentials. Please verify that the TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_ACCESS_TOKEN, and TWITTER_ACCESS_TOKEN_SECRET are all correctly set and not expired in your Supabase Edge Function secrets."
+        };
+      }
+      
       if (errorMessage.includes('403') || 
           errorMessage.includes('Forbidden') || 
           errorMessage.includes('permission')) {

@@ -37,14 +37,18 @@ function generateOAuthSignature(
   consumerSecret: string,
   tokenSecret: string
 ): string {
+  // Sort all parameters alphabetically
+  const allParams = { ...params };
+  
   const signatureBaseString = `${method}&${encodeURIComponent(
     url
   )}&${encodeURIComponent(
-    Object.entries(params)
-      .sort()
-      .map(([k, v]) => `${k}=${v}`)
+    Object.entries(allParams)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
       .join("&")
   )}`;
+  
   const signingKey = `${encodeURIComponent(
     consumerSecret
   )}&${encodeURIComponent(tokenSecret)}`;
@@ -68,7 +72,7 @@ function generateOAuthHeader(method: string, url: string, params: Record<string,
     throw new Error("Missing required Twitter OAuth 1.0a credentials");
   }
 
-  const oauthParams = {
+  const oauthParams: Record<string, string> = {
     oauth_consumer_key: apiKey,
     oauth_nonce: Math.random().toString(36).substring(2),
     oauth_signature_method: "HMAC-SHA1",
@@ -91,13 +95,10 @@ function generateOAuthHeader(method: string, url: string, params: Record<string,
     oauth_signature: signature,
   };
 
-  const entries = Object.entries(signedOAuthParams).sort((a, b) =>
-    a[0].localeCompare(b[0])
-  );
-
   return (
     "OAuth " +
-    entries
+    Object.entries(signedOAuthParams)
+      .sort(([a], [b]) => a.localeCompare(b))
       .map(([k, v]) => `${encodeURIComponent(k)}="${encodeURIComponent(v)}"`)
       .join(", ")
   );
@@ -111,6 +112,8 @@ async function verifyTwitterCredentials(): Promise<{ verified: boolean, user?: a
     const baseUrl = "https://api.twitter.com/1.1/account/verify_credentials.json";
     const method = "GET";
     const oauthHeader = generateOAuthHeader(method, baseUrl);
+    
+    console.log("[TWITTER-INTEGRATION] Verify credentials OAuth header:", oauthHeader);
     
     const response = await fetch(baseUrl, {
       method: method,

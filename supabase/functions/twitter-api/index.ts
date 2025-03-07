@@ -53,14 +53,18 @@ function generateOAuthSignature(
   consumerSecret: string,
   tokenSecret: string
 ): string {
+  // Sort all parameters alphabetically
+  const allParams = { ...params };
+  
   const signatureBaseString = `${method}&${encodeURIComponent(
     url
   )}&${encodeURIComponent(
-    Object.entries(params)
-      .sort()
-      .map(([k, v]) => `${k}=${v}`)
+    Object.entries(allParams)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
       .join("&")
   )}`;
+  
   const signingKey = `${encodeURIComponent(
     consumerSecret
   )}&${encodeURIComponent(tokenSecret)}`;
@@ -74,7 +78,7 @@ function generateOAuthSignature(
   return signature;
 }
 
-function generateOAuthHeader(method: string, url: string, params: Record<string, string> = {}): string {
+function generateOAuthHeader(method: string, url: string, postParams: Record<string, string> = {}): string {
   const apiKey = Deno.env.get("TWITTER_API_KEY")?.trim();
   const apiSecret = Deno.env.get("TWITTER_API_SECRET")?.trim();
   const accessToken = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
@@ -84,36 +88,36 @@ function generateOAuthHeader(method: string, url: string, params: Record<string,
     throw new Error("Missing required Twitter OAuth 1.0a credentials");
   }
 
-  const oauthParams = {
+  const oauthParams: Record<string, string> = {
     oauth_consumer_key: apiKey,
     oauth_nonce: Math.random().toString(36).substring(2),
     oauth_signature_method: "HMAC-SHA1",
     oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
     oauth_token: accessToken,
     oauth_version: "1.0",
-    ...params
   };
 
+  // Combine OAuth parameters with post parameters for signature
+  const signatureParams = { ...oauthParams, ...postParams };
+  
   const signature = generateOAuthSignature(
     method,
     url,
-    oauthParams,
+    signatureParams,
     apiSecret,
     accessTokenSecret
   );
 
-  const signedOAuthParams = {
+  // Only include OAuth parameters in the header
+  const headerParams = {
     ...oauthParams,
     oauth_signature: signature,
   };
 
-  const entries = Object.entries(signedOAuthParams).sort((a, b) =>
-    a[0].localeCompare(b[0])
-  );
-
   return (
     "OAuth " +
-    entries
+    Object.entries(headerParams)
+      .sort(([a], [b]) => a.localeCompare(b))
       .map(([k, v]) => `${encodeURIComponent(k)}="${encodeURIComponent(v)}"`)
       .join(", ")
   );
@@ -264,20 +268,29 @@ serve(async (req) => {
         const baseUrl = "https://api.twitter.com/1.1/statuses/update.json";
         const method = "POST";
         
-        // Create the URL with parameters embedded
+        // Create the post parameters
         const tweetText = requestBody.content;
-        const queryParams = new URLSearchParams({
+        const postParams = {
           status: tweetText
-        });
-        const fullUrl = `${baseUrl}?${queryParams.toString()}`;
+        };
         
-        // Generate OAuth header
-        const oauthHeader = generateOAuthHeader(method, baseUrl, {
-          status: tweetText
-        });
+        // Generate OAuth header with post parameters included for signature
+        const oauthHeader = generateOAuthHeader(method, baseUrl, postParams);
         
-        // Send the tweet
-        const response = await fetch(fullUrl, {
+        // Construct URL with parameters properly encoded
+        const urlParams = new URLSearchParams();
+        for (const [key, value] of Object.entries(postParams)) {
+          urlParams.append(key, value);
+        }
+        
+        // Using application/x-www-form-urlencoded format which Twitter expects
+        const requestUrl = `${baseUrl}?${urlParams.toString()}`;
+        
+        console.log('[TWITTER-API] Sending tweet to URL:', requestUrl);
+        console.log('[TWITTER-API] OAuth Header:', oauthHeader);
+        
+        // Send the tweet using the correct format
+        const response = await fetch(requestUrl, {
           method: method,
           headers: {
             "Authorization": oauthHeader,
@@ -286,6 +299,8 @@ serve(async (req) => {
         });
         
         const responseText = await response.text();
+        console.log('[TWITTER-API] Tweet response status:', response.status);
+        console.log('[TWITTER-API] Tweet response body:', responseText.substring(0, 200));
         
         if (!response.ok) {
           console.error('[TWITTER-API] Tweet posting error:', response.status, responseText);
