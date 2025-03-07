@@ -42,25 +42,16 @@ const corsHeaders = {
 function generateOAuthSignature(
   method: string,
   url: string,
-  oauthParams: Record<string, string>,
-  postParams: Record<string, string> = {},
+  params: Record<string, string>,
   consumerSecret: string,
   tokenSecret: string
 ): string {
-  // CRITICAL FIX: Create a NEW combined params object for signature base
-  const allParams = { ...oauthParams };
-  
-  // Add POST params to the combined params for signature
-  for (const [key, value] of Object.entries(postParams)) {
-    allParams[key] = value;
-  }
-  
   // Sort parameters alphabetically
-  const paramKeys = Object.keys(allParams).sort();
+  const paramKeys = Object.keys(params).sort();
   
   // Build parameter string with proper encoding
   const paramString = paramKeys
-    .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(allParams[key])}`)
+    .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
     .join("&");
   
   // Create the signature base string
@@ -100,34 +91,43 @@ function generateOAuthHeader(
     throw new Error("Missing required Twitter OAuth 1.0a credentials");
   }
 
-  // Create OAuth parameters (DO NOT include post params here)
+  // Create OAuth parameters
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const nonce = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
   
-  const oauthParams: Record<string, string> = {
+  // Combine all parameters (OAuth + post parameters) for signature
+  const allParams: Record<string, string> = {
     oauth_consumer_key: apiKey,
     oauth_nonce: nonce,
     oauth_signature_method: "HMAC-SHA1",
     oauth_timestamp: timestamp,
     oauth_token: accessToken,
-    oauth_version: "1.0"
+    oauth_version: "1.0",
+    ...postParams  // Include POST parameters in signature generation
   };
 
-  // Generate signature using both OAuth params and POST params
+  // Generate signature using all parameters
   const signature = generateOAuthSignature(
     method,
     url,
-    oauthParams,
-    postParams,
+    allParams,
     apiSecret,
     accessTokenSecret
   );
 
-  // Add signature to OAuth params
-  oauthParams.oauth_signature = signature;
+  // Only include OAuth parameters in the authorization header (not post params)
+  const oauthHeaderParams = {
+    oauth_consumer_key: apiKey,
+    oauth_nonce: nonce,
+    oauth_signature_method: "HMAC-SHA1",
+    oauth_timestamp: timestamp,
+    oauth_token: accessToken,
+    oauth_version: "1.0",
+    oauth_signature: signature
+  };
 
-  // Build OAuth header string - ONLY include OAuth params in the header (not post params)
-  return "OAuth " + Object.entries(oauthParams)
+  // Build OAuth header string
+  return "OAuth " + Object.entries(oauthHeaderParams)
     .map(([key, value]) => `${encodeURIComponent(key)}="${encodeURIComponent(value)}"`)
     .join(", ");
 }
