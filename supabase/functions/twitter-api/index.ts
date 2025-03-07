@@ -38,27 +38,29 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, path',
 };
 
-// COMPLETELY REWRITTEN OAUTH 1.0A IMPLEMENTATION FOR TWITTER API V1.1
-// Fixed implementation based on Twitter API documentation
-function generateOAuth1Signature(
+/**
+ * COMPLETELY REWRITTEN OAUTH 1.0A IMPLEMENTATION
+ * Generates OAuth 1.0a signature based on Twitter API requirements
+ */
+function generateOAuthSignature(
   method: string,
-  baseUrl: string,
-  params: Record<string, string>,
+  url: string,
+  oauthParams: Record<string, string>,
+  params: Record<string, string> = {},
   consumerSecret: string,
   tokenSecret: string
 ): string {
-  // Create the parameter string for the signature base
-  const paramString = Object.keys(params)
+  // Create the parameter string by merging and sorting all parameters
+  const allParams = { ...oauthParams, ...params };
+  const paramString = Object.keys(allParams)
     .sort()
-    .map(key => {
-      return `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`;
-    })
+    .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(allParams[key])}`)
     .join("&");
   
-  // Create the signature base string as per OAuth 1.0a spec
+  // Create the signature base string per OAuth 1.0a spec
   const signatureBaseString = [
     method.toUpperCase(),
-    encodeURIComponent(baseUrl),
+    encodeURIComponent(url),
     encodeURIComponent(paramString)
   ].join("&");
   
@@ -77,8 +79,11 @@ function generateOAuth1Signature(
   return signature;
 }
 
-// Create OAuth 1.0a header for Twitter API v1.1 
-function createOAuth1Header(
+/**
+ * Creates the OAuth 1.0a Authorization header
+ * This includes ALL request parameters in signature generation for Twitter API v1.1
+ */
+function createOAuthHeader(
   method: string,
   url: string,
   params: Record<string, string> = {}
@@ -93,7 +98,7 @@ function createOAuth1Header(
     throw new Error("Missing Twitter API credentials");
   }
 
-  // Create OAuth parameters
+  // Generate OAuth parameters
   const oauthParams: Record<string, string> = {
     oauth_consumer_key: apiKey,
     oauth_nonce: Math.random().toString(36).substring(2) + Date.now().toString(),
@@ -103,29 +108,23 @@ function createOAuth1Header(
     oauth_version: "1.0"
   };
 
-  // For signature generation, we need to combine oauth params with request params
-  const signatureParams = { ...oauthParams, ...params };
-  
-  // Generate signature
-  const signature = generateOAuth1Signature(
+  // Generate signature including both OAuth params and request params
+  const signature = generateOAuthSignature(
     method,
     url,
-    signatureParams,
+    oauthParams,
+    params,
     apiSecret,
     accessTokenSecret
   );
 
-  // Add signature to oauth params only
+  // Add signature to OAuth parameters
   oauthParams.oauth_signature = signature;
 
-  // Format authorization header string
-  const authHeader = "OAuth " + Object.keys(oauthParams)
-    .map(key => {
-      return `${encodeURIComponent(key)}="${encodeURIComponent(oauthParams[key])}"`;
-    })
+  // Format OAuth Authorization header
+  return "OAuth " + Object.keys(oauthParams)
+    .map(key => `${encodeURIComponent(key)}="${encodeURIComponent(oauthParams[key])}"`)
     .join(", ");
-    
-  return authHeader;
 }
 
 serve(async (req) => {
@@ -211,7 +210,7 @@ serve(async (req) => {
       
       const baseUrl = "https://api.twitter.com/1.1/account/verify_credentials.json";
       const method = "GET";
-      const oauthHeader = createOAuth1Header(method, baseUrl);
+      const oauthHeader = createOAuthHeader(method, baseUrl);
       
       console.log('[TWITTER-API] OAuth Header for verify:', oauthHeader);
       
@@ -239,7 +238,7 @@ serve(async (req) => {
           .select('id')
           .eq('user_id', user.id)
           .eq('platform', 'twitter')
-          .single();
+          .maybeSingle();
           
         if (existingConnection) {
           await supabaseClient
@@ -287,25 +286,24 @@ serve(async (req) => {
       
       console.log('[TWITTER-API] Posting tweet:', tweetText.substring(0, 50) + '...');
       
-      // V1.1 API endpoint for posting a tweet
+      // Twitter v1.1 API endpoint for posting a tweet
       const baseUrl = "https://api.twitter.com/1.1/statuses/update.json";
       
-      // Create params for the request - CRITICAL: these are used in signature generation AND form data
-      const tweetParams = { 
-        status: tweetText
-      };
+      // Parameter to include in the signature AND as form data
+      const tweetParams = { status: tweetText };
       
-      // Generate OAuth header including the status parameter in signature
-      const oauthHeader = createOAuth1Header("POST", baseUrl, tweetParams);
+      // Generate OAuth header WITH the status parameter in the signature
+      const oauthHeader = createOAuthHeader("POST", baseUrl, tweetParams);
       console.log('[TWITTER-API] OAuth Header for tweet:', oauthHeader);
       
-      // Create the form data for the POST request
+      // Create URL-encoded form data
       const formData = new URLSearchParams();
       formData.append("status", tweetText);
       const formDataString = formData.toString();
+      
       console.log('[TWITTER-API] Form data:', formDataString);
       
-      // Make the request to post the tweet
+      // Make the API request with proper headers and form data
       const response = await fetch(baseUrl, {
         method: "POST",
         headers: {
@@ -315,8 +313,8 @@ serve(async (req) => {
         body: formDataString
       });
       
-      console.log('[TWITTER-API] Tweet response status:', response.status);
       const responseText = await response.text();
+      console.log('[TWITTER-API] Tweet response status:', response.status);
       console.log('[TWITTER-API] Tweet response body:', responseText);
       
       if (!response.ok) {
@@ -324,9 +322,16 @@ serve(async (req) => {
         throw new Error(`Failed to post tweet: ${response.status} ${responseText}`);
       }
       
-      const tweetData = JSON.parse(responseText);
+      // Handle the JSON response with the posted tweet data
+      let tweetData;
+      try {
+        tweetData = JSON.parse(responseText);
+      } catch (e) {
+        console.error('[TWITTER-API] Error parsing tweet response:', e);
+        throw new Error('Failed to parse tweet response');
+      }
       
-      // Record successful tweet in database
+      // Store successful tweet in database
       try {
         await supabaseClient.from('social_posts').insert({
           user_id: user.id,
@@ -352,7 +357,7 @@ serve(async (req) => {
       
       const baseUrl = "https://api.twitter.com/1.1/application/rate_limit_status.json";
       const method = "GET";
-      const oauthHeader = generateOAuthAuthorizationHeader(method, baseUrl);
+      const oauthHeader = createOAuthHeader(method, baseUrl);
       
       const response = await fetch(baseUrl, {
         method: method,
