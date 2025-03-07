@@ -1,10 +1,10 @@
-<lov-codelov-code>
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
 import { supabase, getCurrentUser } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { SocialPlatform } from '@/types'; // Add this import
+import { SocialPlatform } from '@/types';
 
 interface RefreshDataButtonProps {
   className?: string;
@@ -373,7 +373,7 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
               last_verified: new Date().toISOString()
             })
             .eq('user_id', user.id)
-            .eq('platform', 'twitter');
+            .eq('platform', 'twitter' as SocialPlatform);
         }
         
         return {
@@ -419,7 +419,7 @@ export const publishToTwitter = async (content: string, mediaUrl?: string): Prom
     if (user) {
       await supabase.from('social_posts').insert({
         user_id: user.id,
-        platform: 'twitter',
+        platform: 'twitter' as SocialPlatform,
         content: content,
         external_id: response.data?.id?.toString() || null,
         posted_at: new Date().toISOString()
@@ -488,4 +488,3 @@ const RefreshDataButton: React.FC<RefreshDataButtonProps> = ({
 };
 
 export default RefreshDataButton;
-</lov-code>
