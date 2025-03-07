@@ -10,10 +10,10 @@ const CALLBACK_URL = Deno.env.get("TWITTER_CALLBACK_URL") || "https://fxzamjowvp
 
 // Enhanced debugging for Twitter API credentials
 console.log("[TWITTER-INTEGRATION] Environment variable check (detailed):");
-console.log("[TWITTER-INTEGRATION] API_KEY present:", !!API_KEY, "Length:", API_KEY?.length || 0, "First chars:", API_KEY?.substring(0, 4));
-console.log("[TWITTER-INTEGRATION] API_SECRET present:", !!API_SECRET, "Length:", API_SECRET?.length || 0, "First chars:", API_SECRET?.substring(0, 4));
-console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN present:", !!ACCESS_TOKEN, "Length:", ACCESS_TOKEN?.length || 0, "First chars:", ACCESS_TOKEN?.substring(0, 4));
-console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN_SECRET present:", !!ACCESS_TOKEN_SECRET, "Length:", ACCESS_TOKEN_SECRET?.length || 0, "First chars:", ACCESS_TOKEN_SECRET?.substring(0, 4));
+console.log("[TWITTER-INTEGRATION] API_KEY present:", !!API_KEY, "Length:", API_KEY?.length || 0, "First chars:", API_KEY?.substring(0, 4), "Last chars:", API_KEY ? API_KEY.substring(API_KEY.length - 4) : "none");
+console.log("[TWITTER-INTEGRATION] API_SECRET present:", !!API_SECRET, "Length:", API_SECRET?.length || 0, "First chars:", API_SECRET?.substring(0, 4), "Last chars:", API_SECRET ? API_SECRET.substring(API_SECRET.length - 4) : "none");
+console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN present:", !!ACCESS_TOKEN, "Length:", ACCESS_TOKEN?.length || 0, "First chars:", ACCESS_TOKEN?.substring(0, 4), "Last chars:", ACCESS_TOKEN ? ACCESS_TOKEN.substring(ACCESS_TOKEN.length - 4) : "none");
+console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN_SECRET present:", !!ACCESS_TOKEN_SECRET, "Length:", ACCESS_TOKEN_SECRET?.length || 0, "First chars:", ACCESS_TOKEN_SECRET?.substring(0, 4), "Last chars:", ACCESS_TOKEN_SECRET ? ACCESS_TOKEN_SECRET.substring(ACCESS_TOKEN_SECRET.length - 4) : "none");
 console.log("[TWITTER-INTEGRATION] CALLBACK_URL:", CALLBACK_URL);
 
 // CORS headers for browser requests
@@ -166,6 +166,13 @@ function validateEnvironmentVariables() {
   
   console.log("[TWITTER-INTEGRATION] All Twitter API credentials are present and formatted correctly");
   console.log("[TWITTER-INTEGRATION] Using callback URL:", CALLBACK_URL);
+
+  // Add extra debugging around OAuth 1.0a parameters
+  console.log("[TWITTER-INTEGRATION] Credentials debug info:");
+  console.log("[TWITTER-INTEGRATION] API_KEY type:", typeof API_KEY, "contains spaces:", API_KEY?.includes(" ") || false);
+  console.log("[TWITTER-INTEGRATION] API_SECRET type:", typeof API_SECRET, "contains spaces:", API_SECRET?.includes(" ") || false);
+  console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN type:", typeof ACCESS_TOKEN, "contains spaces:", ACCESS_TOKEN?.includes(" ") || false); 
+  console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN_SECRET type:", typeof ACCESS_TOKEN_SECRET, "contains spaces:", ACCESS_TOKEN_SECRET?.includes(" ") || false);
 }
 
 // Generate OAuth 1.0a signature with enhanced debugging
@@ -321,6 +328,8 @@ async function sendTweet(tweetText: string): Promise<any> {
     const testAuthHeader = generateOAuthHeader(testMethod, testUrl, {}, ACCESS_TOKEN, ACCESS_TOKEN_SECRET);
     
     console.log("[TWITTER-INTEGRATION] Sending test GET request to:", testUrl);
+    console.log("[TWITTER-INTEGRATION] Test Auth Header (first 20 chars):", testAuthHeader.substring(0, 20) + "...");
+    
     const testResponse = await fetch(testUrl, {
       method: testMethod,
       headers: {
@@ -338,6 +347,13 @@ async function sendTweet(tweetText: string): Promise<any> {
       
       // Check if this is an auth issue
       if (testResponse.status === 401) {
+        // When we get 401 Unauthorized, perform an advanced credential diagnostic
+        console.log("[TWITTER-INTEGRATION] Performing advanced credential diagnostic for 401 Unauthorized:");
+        console.log("[TWITTER-INTEGRATION] API_KEY format correct:", /^[a-zA-Z0-9]{25,}$/.test(API_KEY || ""));
+        console.log("[TWITTER-INTEGRATION] API_SECRET format correct:", /^[a-zA-Z0-9]{40,}$/.test(API_SECRET || ""));
+        console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN format correct:", /^\d+-[a-zA-Z0-9]{40,}$/.test(ACCESS_TOKEN || ""));
+        console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN_SECRET format correct:", /^[a-zA-Z0-9]{35,}$/.test(ACCESS_TOKEN_SECRET || ""));
+        
         throw new Error(`Authentication failed: Your Twitter API credentials are invalid or expired. Status: ${testResponse.status}, Body: ${testResponseText}`);
       }
       
@@ -795,6 +811,14 @@ serve(async (req) => {
           responseBody.details = "Twitter doesn't allow posting identical tweets. Try modifying your content slightly.";
         }
         
+        // Check if this is an authentication issue
+        if (errorMessage.includes("Authentication failed") || errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
+          status = 401;
+          responseBody.error = "Twitter API authentication failed";
+          responseBody.instructions = "Please verify your Twitter API credentials are correct and up-to-date. You must ensure all four of these values are correct: TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_ACCESS_TOKEN, and TWITTER_ACCESS_TOKEN_SECRET.";
+          responseBody.hint = "Make sure you've regenerated fresh tokens from the Twitter Developer Portal after enabling read & write permissions.";
+        }
+        
         return new Response(JSON.stringify(responseBody), {
           status: status,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -906,3 +930,4 @@ serve(async (req) => {
     });
   }
 });
+

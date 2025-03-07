@@ -23,9 +23,23 @@ for (const key of twitterApiKeys) {
   const value = Deno.env.get(key);
   const valueExists = !!value;
   const valueLength = value?.length || 0;
-  const valuePattern = valueExists ? value.substring(0, 4) + "..." + (valueLength > 8 ? value.substring(valueLength - 4) : "") : "not set";
+  const valuePattern = valueExists 
+    ? value.substring(0, 4) + "..." + (valueLength > 8 ? value.substring(valueLength - 4) : "") 
+    : "not set";
+  const containsSpaces = valueExists ? value.includes(" ") : false;
   
-  console.log(`[TWITTER-API] ${key}: ${valueExists ? "SET" : "NOT SET"}, Length: ${valueLength}, Pattern: ${valuePattern}`);
+  console.log(`[TWITTER-API] ${key}: ${valueExists ? "SET" : "NOT SET"}, Length: ${valueLength}, Pattern: ${valuePattern}, Contains spaces: ${containsSpaces}`);
+  
+  // Additional format validation for specific keys
+  if (key === "TWITTER_API_KEY" && valueExists) {
+    console.log(`[TWITTER-API] ${key} format valid:`, /^[a-zA-Z0-9]{25,}$/.test(value));
+  } else if (key === "TWITTER_API_SECRET" && valueExists) {
+    console.log(`[TWITTER-API] ${key} format valid:`, /^[a-zA-Z0-9]{40,}$/.test(value));
+  } else if (key === "TWITTER_ACCESS_TOKEN" && valueExists) {
+    console.log(`[TWITTER-API] ${key} format valid:`, /^\d+-[a-zA-Z0-9]{40,}$/.test(value));
+  } else if (key === "TWITTER_ACCESS_TOKEN_SECRET" && valueExists) {
+    console.log(`[TWITTER-API] ${key} format valid:`, /^[a-zA-Z0-9]{35,}$/.test(value));
+  }
 }
 
 // CORS headers for browser requests
