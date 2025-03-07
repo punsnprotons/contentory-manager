@@ -1,20 +1,42 @@
+
+// Only update the beginning of the file with improved credential validation
+
 import { createHmac } from "node:crypto";
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
-// Twitter API credentials from environment variables
+// Twitter API credentials from environment variables with extra trimming
 const API_KEY = Deno.env.get("TWITTER_API_KEY")?.trim();
 const API_SECRET = Deno.env.get("TWITTER_API_SECRET")?.trim();
 const ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
 const ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")?.trim();
 const CALLBACK_URL = Deno.env.get("TWITTER_CALLBACK_URL") || "https://fxzamjowvpnyuxthusib.supabase.co/functions/v1/twitter-integration/callback";
 
-// Enhanced debugging for Twitter API credentials
+// Enhanced debugging for Twitter API credentials, focusing on potential formatting issues
+console.log("[TWITTER-INTEGRATION] Twitter integration starting with app: personaltwitteragent");
+console.log("[TWITTER-INTEGRATION] Using OAuth 1.0a authentication method (not OAuth 2.0)");
 console.log("[TWITTER-INTEGRATION] Environment variable check (detailed):");
-console.log("[TWITTER-INTEGRATION] API_KEY present:", !!API_KEY, "Length:", API_KEY?.length || 0, "First chars:", API_KEY?.substring(0, 4), "Last chars:", API_KEY ? API_KEY.substring(API_KEY.length - 4) : "none");
-console.log("[TWITTER-INTEGRATION] API_SECRET present:", !!API_SECRET, "Length:", API_SECRET?.length || 0, "First chars:", API_SECRET?.substring(0, 4), "Last chars:", API_SECRET ? API_SECRET.substring(API_SECRET.length - 4) : "none");
-console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN present:", !!ACCESS_TOKEN, "Length:", ACCESS_TOKEN?.length || 0, "First chars:", ACCESS_TOKEN?.substring(0, 4), "Last chars:", ACCESS_TOKEN ? ACCESS_TOKEN.substring(ACCESS_TOKEN.length - 4) : "none");
-console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN_SECRET present:", !!ACCESS_TOKEN_SECRET, "Length:", ACCESS_TOKEN_SECRET?.length || 0, "First chars:", ACCESS_TOKEN_SECRET?.substring(0, 4), "Last chars:", ACCESS_TOKEN_SECRET ? ACCESS_TOKEN_SECRET.substring(ACCESS_TOKEN_SECRET.length - 4) : "none");
+
+// Check for common formatting issues in credentials
+const checkCredential = (name: string, value?: string): string => {
+  if (!value) return "MISSING";
+  if (value.includes(" ")) return "CONTAINS SPACES";
+  if (value.includes('"') || value.includes("'")) return "CONTAINS QUOTES";
+  if (value.length < 10) return "TOO SHORT";
+  return "VALID FORMAT";
+};
+
+console.log(`[TWITTER-INTEGRATION] API_KEY: ${checkCredential("API_KEY", API_KEY)}, Length: ${API_KEY?.length || 0}, First/Last chars: ${API_KEY ? `${API_KEY.substring(0, 4)}...${API_KEY.substring(API_KEY.length - 4)}` : "N/A"}`);
+console.log(`[TWITTER-INTEGRATION] API_SECRET: ${checkCredential("API_SECRET", API_SECRET)}, Length: ${API_SECRET?.length || 0}, First/Last chars: ${API_SECRET ? `${API_SECRET.substring(0, 4)}...${API_SECRET.substring(API_SECRET.length - 4)}` : "N/A"}`);
+console.log(`[TWITTER-INTEGRATION] ACCESS_TOKEN: ${checkCredential("ACCESS_TOKEN", ACCESS_TOKEN)}, Length: ${ACCESS_TOKEN?.length || 0}, First/Last chars: ${ACCESS_TOKEN ? `${ACCESS_TOKEN.substring(0, 4)}...${ACCESS_TOKEN.substring(ACCESS_TOKEN.length - 4)}` : "N/A"}`);
+console.log(`[TWITTER-INTEGRATION] ACCESS_TOKEN_SECRET: ${checkCredential("ACCESS_TOKEN_SECRET", ACCESS_TOKEN_SECRET)}, Length: ${ACCESS_TOKEN_SECRET?.length || 0}, First/Last chars: ${ACCESS_TOKEN_SECRET ? `${ACCESS_TOKEN_SECRET.substring(0, 4)}...${ACCESS_TOKEN_SECRET.substring(ACCESS_TOKEN_SECRET.length - 4)}` : "N/A"}`);
 console.log("[TWITTER-INTEGRATION] CALLBACK_URL:", CALLBACK_URL);
+
+// Add specific validation for token formats
+console.log("[TWITTER-INTEGRATION] Credential format validation:");
+console.log(`[TWITTER-INTEGRATION] API_KEY matches expected format: ${API_KEY ? /^[a-zA-Z0-9]{25,}$/.test(API_KEY) : false}`);
+console.log(`[TWITTER-INTEGRATION] API_SECRET matches expected format: ${API_SECRET ? /^[a-zA-Z0-9]{35,}$/.test(API_SECRET) : false}`);
+console.log(`[TWITTER-INTEGRATION] ACCESS_TOKEN matches expected format: ${ACCESS_TOKEN ? /^\d+-[a-zA-Z0-9]{20,}$/.test(ACCESS_TOKEN) : false}`);
+console.log(`[TWITTER-INTEGRATION] ACCESS_TOKEN_SECRET matches expected format: ${ACCESS_TOKEN_SECRET ? /^[a-zA-Z0-9]{35,}$/.test(ACCESS_TOKEN_SECRET) : false}`);
 
 // CORS headers for browser requests
 const corsHeaders = {
@@ -148,23 +170,36 @@ function formatRateLimitWaitTime(ms: number): string {
 // Validate environment variables with more detailed output
 function validateEnvironmentVariables() {
   const missingVars = [];
+  const invalidVars = [];
   
   if (!API_KEY) missingVars.push("TWITTER_API_KEY");
+  else if (!(/^[a-zA-Z0-9]{25,}$/.test(API_KEY))) invalidVars.push("TWITTER_API_KEY (format invalid)");
+  
   if (!API_SECRET) missingVars.push("TWITTER_API_SECRET");
+  else if (!(/^[a-zA-Z0-9]{35,}$/.test(API_SECRET))) invalidVars.push("TWITTER_API_SECRET (format invalid)");
+  
   if (!ACCESS_TOKEN) missingVars.push("TWITTER_ACCESS_TOKEN");
+  else if (!(/^\d+-[a-zA-Z0-9]{20,}$/.test(ACCESS_TOKEN))) invalidVars.push("TWITTER_ACCESS_TOKEN (format invalid)");
+  
   if (!ACCESS_TOKEN_SECRET) missingVars.push("TWITTER_ACCESS_TOKEN_SECRET");
+  else if (!(/^[a-zA-Z0-9]{35,}$/.test(ACCESS_TOKEN_SECRET))) invalidVars.push("TWITTER_ACCESS_TOKEN_SECRET (format invalid)");
   
   if (missingVars.length > 0) {
     throw new Error(`Missing environment variables: ${missingVars.join(", ")}`);
   }
   
-  // Log credential patterns for debugging, without revealing full values
-  console.log("[TWITTER-INTEGRATION] API_KEY pattern:", API_KEY?.substring(0, 4) + "..." + API_KEY?.substring(API_KEY.length - 4));
-  console.log("[TWITTER-INTEGRATION] API_SECRET pattern:", API_SECRET?.substring(0, 4) + "..." + API_SECRET?.substring(API_SECRET.length - 4));
-  console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN pattern:", ACCESS_TOKEN?.substring(0, 8) + "..." + ACCESS_TOKEN?.substring(ACCESS_TOKEN.length - 4));
-  console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN_SECRET pattern:", ACCESS_TOKEN_SECRET?.substring(0, 4) + "..." + ACCESS_TOKEN_SECRET?.substring(ACCESS_TOKEN_SECRET.length - 4));
+  if (invalidVars.length > 0) {
+    throw new Error(`Invalid environment variables format: ${invalidVars.join(", ")}`);
+  }
   
-  console.log("[TWITTER-INTEGRATION] All Twitter API credentials are present and formatted correctly");
+  // Log standard format patterns for verification
+  console.log("[TWITTER-INTEGRATION] Expected credential formats:");
+  console.log("[TWITTER-INTEGRATION] API_KEY: 25+ alphanumeric characters");
+  console.log("[TWITTER-INTEGRATION] API_SECRET: 35+ alphanumeric characters");
+  console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN: digits-alphanumeric (e.g., 123456-abc123...)");
+  console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN_SECRET: 35+ alphanumeric characters");
+  
+  console.log("[TWITTER-INTEGRATION] All Twitter API credentials are present");
   console.log("[TWITTER-INTEGRATION] Using callback URL:", CALLBACK_URL);
 
   // Add extra debugging around OAuth 1.0a parameters
@@ -175,7 +210,7 @@ function validateEnvironmentVariables() {
   console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN_SECRET type:", typeof ACCESS_TOKEN_SECRET, "contains spaces:", ACCESS_TOKEN_SECRET?.includes(" ") || false);
 }
 
-// Generate OAuth 1.0a signature with enhanced debugging
+// Update the OAuth signature generation with detailed logging
 function generateOAuthSignature(
   method: string,
   url: string,
@@ -204,9 +239,12 @@ function generateOAuthSignature(
     const hmac = createHmac('sha1', signingKey);
     const signature = hmac.update(signatureBaseString).digest('base64');
     
+    console.log("[TWITTER-INTEGRATION] OAuth 1.0a signature generation:");
+    console.log("[TWITTER-INTEGRATION] Method:", method.toUpperCase());
+    console.log("[TWITTER-INTEGRATION] URL:", url);
     console.log("[TWITTER-INTEGRATION] Parameter String:", parameterString);
     console.log("[TWITTER-INTEGRATION] Signature Base String:", signatureBaseString);
-    console.log("[TWITTER-INTEGRATION] Signing Key pattern:", signingKey.replace(/./g, '*') + " (redacted for security)");
+    console.log("[TWITTER-INTEGRATION] Signing Key Length:", signingKey.length);
     console.log("[TWITTER-INTEGRATION] Generated Signature:", signature);
     
     return signature;
