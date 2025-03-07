@@ -206,7 +206,7 @@ serve(async (req) => {
       
       console.log('[TWITTER-INTEGRATION] Twitter credentials verified successfully');
       
-      // Store connection info in platform_connections table - CRITICAL FIX HERE
+      // Store connection info in platform_connections table - FIX HERE
       try {
         console.log('[TWITTER-INTEGRATION] Storing Twitter connection in database for user:', user.id);
         
@@ -221,6 +221,8 @@ serve(async (req) => {
           console.error('[TWITTER-INTEGRATION] Error finding user:', userError);
           // Continue anyway to try to store the connection
         }
+        
+        let userId = user.id;
         
         if (!userData) {
           console.log('[TWITTER-INTEGRATION] User not found in users table, creating user entry');
@@ -238,11 +240,21 @@ serve(async (req) => {
           }
         }
 
-        // Now store the connection - we use upsert to handle both insert and update cases
-        console.log('[TWITTER-INTEGRATION] Storing/updating platform connection for Twitter');
+        // Now store the connection - First check if one already exists
+        const { data: existingConnection, error: checkError } = await supabaseClient
+          .from('platform_connections')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('platform', 'twitter')
+          .maybeSingle();
+          
+        if (checkError && checkError.code !== 'PGRST116') {
+          console.error('[TWITTER-INTEGRATION] Error checking for existing connection:', checkError);
+        }
         
+        // Prepare the connection data
         const connectionData = {
-          user_id: user.id,
+          user_id: userId,
           platform: 'twitter',
           connected: true,
           username: verifyResult.user?.screen_name,
@@ -252,40 +264,54 @@ serve(async (req) => {
         
         console.log('[TWITTER-INTEGRATION] Connection data:', connectionData);
         
-        const { error: connectionError } = await supabaseClient
-          .from('platform_connections')
-          .upsert(connectionData, {
-            onConflict: 'user_id,platform'
-          });
+        let connectionResult;
+        
+        if (existingConnection) {
+          // Update existing connection
+          console.log('[TWITTER-INTEGRATION] Updating existing connection with ID:', existingConnection.id);
+          connectionResult = await supabaseClient
+            .from('platform_connections')
+            .update(connectionData)
+            .eq('id', existingConnection.id);
+        } else {
+          // Insert new connection
+          console.log('[TWITTER-INTEGRATION] Creating new connection');
+          connectionResult = await supabaseClient
+            .from('platform_connections')
+            .insert(connectionData);
+        }
+        
+        if (connectionResult.error) {
+          console.error('[TWITTER-INTEGRATION] Error storing/updating connection:', connectionResult.error);
+          console.error('[TWITTER-INTEGRATION] Detailed error:', JSON.stringify(connectionResult.error));
           
-        if (connectionError) {
-          console.error('[TWITTER-INTEGRATION] Error storing/updating connection:', connectionError);
-          console.error('[TWITTER-INTEGRATION] Detailed error:', JSON.stringify(connectionError));
+          // Try with service role key if needed
+          console.log('[TWITTER-INTEGRATION] Trying with service role...');
+          const adminClient = createClient(
+            Deno.env.get('SUPABASE_URL') ?? '',
+            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+          );
           
-          // Try another approach - delete then insert
-          if (connectionError.code === '42501') { // Permission denied error
-            console.log('[TWITTER-INTEGRATION] Trying alternative approach - delete and insert');
-            
-            // First try to delete any existing connection
-            const { error: deleteError } = await supabaseClient
+          if (existingConnection) {
+            const { error: adminError } = await adminClient
               .from('platform_connections')
-              .delete()
-              .eq('user_id', user.id)
-              .eq('platform', 'twitter');
+              .update(connectionData)
+              .eq('id', existingConnection.id);
               
-            if (deleteError) {
-              console.error('[TWITTER-INTEGRATION] Error deleting existing connection:', deleteError);
+            if (adminError) {
+              console.error('[TWITTER-INTEGRATION] Admin update error:', adminError);
             } else {
-              // Then insert new connection
-              const { error: insertError } = await supabaseClient
-                .from('platform_connections')
-                .insert(connectionData);
-                
-              if (insertError) {
-                console.error('[TWITTER-INTEGRATION] Error inserting new connection:', insertError);
-              } else {
-                console.log('[TWITTER-INTEGRATION] Successfully inserted connection after delete');
-              }
+              console.log('[TWITTER-INTEGRATION] Successfully updated connection with service role');
+            }
+          } else {
+            const { error: adminError } = await adminClient
+              .from('platform_connections')
+              .insert(connectionData);
+              
+            if (adminError) {
+              console.error('[TWITTER-INTEGRATION] Admin insert error:', adminError);
+            } else {
+              console.log('[TWITTER-INTEGRATION] Successfully inserted connection with service role');
             }
           }
         } else {
