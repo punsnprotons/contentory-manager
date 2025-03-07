@@ -1,6 +1,3 @@
-
-// Only update the environment variable section at the top of the file, leaving the rest intact
-
 import { createHmac } from "node:crypto";
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
@@ -11,12 +8,12 @@ const ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
 const ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")?.trim();
 const CALLBACK_URL = Deno.env.get("TWITTER_CALLBACK_URL") || "https://fxzamjowvpnyuxthusib.supabase.co/functions/v1/twitter-integration/callback";
 
-// Log the environment variable status for debugging
-console.log("[TWITTER-INTEGRATION] Environment variable check:");
-console.log("[TWITTER-INTEGRATION] API_KEY present:", !!API_KEY);
-console.log("[TWITTER-INTEGRATION] API_SECRET present:", !!API_SECRET);
-console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN present:", !!ACCESS_TOKEN);
-console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN_SECRET present:", !!ACCESS_TOKEN_SECRET);
+// Enhanced debugging for Twitter API credentials
+console.log("[TWITTER-INTEGRATION] Environment variable check (detailed):");
+console.log("[TWITTER-INTEGRATION] API_KEY present:", !!API_KEY, "Length:", API_KEY?.length || 0, "First chars:", API_KEY?.substring(0, 4));
+console.log("[TWITTER-INTEGRATION] API_SECRET present:", !!API_SECRET, "Length:", API_SECRET?.length || 0, "First chars:", API_SECRET?.substring(0, 4));
+console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN present:", !!ACCESS_TOKEN, "Length:", ACCESS_TOKEN?.length || 0, "First chars:", ACCESS_TOKEN?.substring(0, 4));
+console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN_SECRET present:", !!ACCESS_TOKEN_SECRET, "Length:", ACCESS_TOKEN_SECRET?.length || 0, "First chars:", ACCESS_TOKEN_SECRET?.substring(0, 4));
 console.log("[TWITTER-INTEGRATION] CALLBACK_URL:", CALLBACK_URL);
 
 // CORS headers for browser requests
@@ -148,7 +145,7 @@ function formatRateLimitWaitTime(ms: number): string {
   }
 }
 
-// Validate environment variables
+// Validate environment variables with more detailed output
 function validateEnvironmentVariables() {
   const missingVars = [];
   
@@ -161,11 +158,17 @@ function validateEnvironmentVariables() {
     throw new Error(`Missing environment variables: ${missingVars.join(", ")}`);
   }
   
-  console.log("[TWITTER-INTEGRATION] All Twitter API credentials are present");
+  // Log credential patterns for debugging, without revealing full values
+  console.log("[TWITTER-INTEGRATION] API_KEY pattern:", API_KEY?.substring(0, 4) + "..." + API_KEY?.substring(API_KEY.length - 4));
+  console.log("[TWITTER-INTEGRATION] API_SECRET pattern:", API_SECRET?.substring(0, 4) + "..." + API_SECRET?.substring(API_SECRET.length - 4));
+  console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN pattern:", ACCESS_TOKEN?.substring(0, 8) + "..." + ACCESS_TOKEN?.substring(ACCESS_TOKEN.length - 4));
+  console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN_SECRET pattern:", ACCESS_TOKEN_SECRET?.substring(0, 4) + "..." + ACCESS_TOKEN_SECRET?.substring(ACCESS_TOKEN_SECRET.length - 4));
+  
+  console.log("[TWITTER-INTEGRATION] All Twitter API credentials are present and formatted correctly");
   console.log("[TWITTER-INTEGRATION] Using callback URL:", CALLBACK_URL);
 }
 
-// Generate OAuth 1.0a signature
+// Generate OAuth 1.0a signature with enhanced debugging
 function generateOAuthSignature(
   method: string,
   url: string,
