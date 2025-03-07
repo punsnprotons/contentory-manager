@@ -45,7 +45,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, path',
 };
 
-// OAuth 1.0a helper functions
+// OAuth 1.0a helper functions - REVISED FOR CORRECTNESS
 function generateOAuthSignature(
   method: string,
   url: string,
@@ -53,21 +53,15 @@ function generateOAuthSignature(
   consumerSecret: string,
   tokenSecret: string
 ): string {
-  // Sort all parameters alphabetically
-  const allParams = { ...params };
+  // Sort all parameters alphabetically by the encoded key
+  const encodedParams = Object.entries(params)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
   
-  const signatureBaseString = `${method}&${encodeURIComponent(
-    url
-  )}&${encodeURIComponent(
-    Object.entries(allParams)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-      .join("&")
-  )}`;
+  const signatureBaseString = `${method}&${encodeURIComponent(url)}&${encodeURIComponent(encodedParams.join("&"))}`;
   
-  const signingKey = `${encodeURIComponent(
-    consumerSecret
-  )}&${encodeURIComponent(tokenSecret)}`;
+  // Create the signing key
+  const signingKey = `${encodeURIComponent(consumerSecret)}&${encodeURIComponent(tokenSecret)}`;
   
   const hmacSha1 = createHmac("sha1", signingKey);
   const signature = hmacSha1.update(signatureBaseString).digest("base64");
@@ -98,12 +92,12 @@ function generateOAuthHeader(method: string, url: string, postParams: Record<str
   };
 
   // Combine OAuth parameters with post parameters for signature
-  const signatureParams = { ...oauthParams, ...postParams };
+  const allParams = { ...oauthParams, ...postParams };
   
   const signature = generateOAuthSignature(
     method,
     url,
-    signatureParams,
+    allParams,
     apiSecret,
     accessTokenSecret
   );
@@ -265,37 +259,34 @@ serve(async (req) => {
       console.log('[TWITTER-API] Tweet content with OAuth 1.0a:', requestBody.content.substring(0, 50) + (requestBody.content.length > 50 ? '...' : ''));
       
       try {
+        // This is the correct endpoint URL for posting tweets
         const baseUrl = "https://api.twitter.com/1.1/statuses/update.json";
         const method = "POST";
         
-        // Create the post parameters
+        // Create the post parameters - the status parameter must be properly encoded
         const tweetText = requestBody.content;
         const postParams = {
           status: tweetText
         };
         
-        // Generate OAuth header with post parameters included for signature
+        // We'll generate the OAuth header with post parameters for signature
         const oauthHeader = generateOAuthHeader(method, baseUrl, postParams);
         
-        // Construct URL with parameters properly encoded
-        const urlParams = new URLSearchParams();
-        for (const [key, value] of Object.entries(postParams)) {
-          urlParams.append(key, value);
-        }
+        // For Twitter's API, we use x-www-form-urlencoded format
+        const formData = new URLSearchParams();
+        formData.append('status', tweetText);
         
-        // Using application/x-www-form-urlencoded format which Twitter expects
-        const requestUrl = `${baseUrl}?${urlParams.toString()}`;
-        
-        console.log('[TWITTER-API] Sending tweet to URL:', requestUrl);
+        console.log('[TWITTER-API] Sending tweet using form data');
         console.log('[TWITTER-API] OAuth Header:', oauthHeader);
         
-        // Send the tweet using the correct format
-        const response = await fetch(requestUrl, {
+        // Use the correct format for Twitter's API
+        const response = await fetch(baseUrl, {
           method: method,
           headers: {
             "Authorization": oauthHeader,
             "Content-Type": "application/x-www-form-urlencoded"
-          }
+          },
+          body: formData.toString()
         });
         
         const responseText = await response.text();

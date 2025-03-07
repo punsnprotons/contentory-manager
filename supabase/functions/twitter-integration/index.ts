@@ -29,7 +29,7 @@ for (const key of envVars) {
 
 console.log("[TWITTER-INTEGRATION] Using OAuth 1.0a authentication method");
 
-// OAuth 1.0a helper functions - same as in twitter-api function
+// OAuth 1.0a helper functions - REVISED FOR CORRECTNESS
 function generateOAuthSignature(
   method: string,
   url: string,
@@ -37,21 +37,15 @@ function generateOAuthSignature(
   consumerSecret: string,
   tokenSecret: string
 ): string {
-  // Sort all parameters alphabetically
-  const allParams = { ...params };
+  // Sort all parameters alphabetically by the encoded key
+  const encodedParams = Object.entries(params)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
   
-  const signatureBaseString = `${method}&${encodeURIComponent(
-    url
-  )}&${encodeURIComponent(
-    Object.entries(allParams)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-      .join("&")
-  )}`;
+  const signatureBaseString = `${method}&${encodeURIComponent(url)}&${encodeURIComponent(encodedParams.join("&"))}`;
   
-  const signingKey = `${encodeURIComponent(
-    consumerSecret
-  )}&${encodeURIComponent(tokenSecret)}`;
+  // Create the signing key
+  const signingKey = `${encodeURIComponent(consumerSecret)}&${encodeURIComponent(tokenSecret)}`;
   
   const hmacSha1 = createHmac("sha1", signingKey);
   const signature = hmacSha1.update(signatureBaseString).digest("base64");
