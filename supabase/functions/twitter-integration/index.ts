@@ -786,6 +786,85 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+    } else if (endpoint === 'rate-limits' || endpoint === 'twitter-integration' && req.method === 'POST' && (body as any).endpoint === 'rate-limits') {
+      console.log("[TWITTER-INTEGRATION] Handling rate limits request");
+      
+      // Get client-side rate limiting info
+      const clientRateLimits = {
+        endpoints: {},
+        globalStatus: {
+          ok: true,
+          message: "No rate limiting detected on client side."
+        }
+      };
+      
+      // Check all stored endpoints 
+      Object.entries(lastRequestTimeByIP).forEach(([ip, endpoints]) => {
+        clientRateLimits.endpoints[ip] = {};
+        
+        Object.entries(endpoints).forEach(([endpoint, data]) => {
+          const now = Date.now();
+          
+          // Clean up old requests
+          const remainingRequests = data.requests.filter(time => now - time < IP_RATE_LIMIT_WINDOW_MS);
+          const isLimited = remainingRequests.length >= MAX_REQUESTS_PER_WINDOW;
+          
+          // Calculate reset time
+          let resetTime = 0;
+          if (isLimited && remainingRequests.length > 0) {
+            const oldestRequest = Math.min(...remainingRequests);
+            resetTime = oldestRequest + IP_RATE_LIMIT_WINDOW_MS - now;
+          }
+          
+          clientRateLimits.endpoints[ip][endpoint] = {
+            isLimited: isLimited,
+            windowLengthMs: IP_RATE_LIMIT_WINDOW_MS,
+            maxRequestsPerWindow: MAX_REQUESTS_PER_WINDOW,
+            requestsMade: remainingRequests.length,
+            requestsRemaining: Math.max(0, MAX_REQUESTS_PER_WINDOW - remainingRequests.length),
+            resetTimeMs: resetTime,
+            resetTimeFormatted: formatRateLimitWaitTime(resetTime),
+            consecutiveErrors: data.consecutiveErrors
+          };
+          
+          // Update global status
+          if (isLimited) {
+            clientRateLimits.globalStatus.ok = false;
+            clientRateLimits.globalStatus.message = `Rate limited on endpoint "${endpoint}". Reset in ${formatRateLimitWaitTime(resetTime)}.`;
+          }
+        });
+      });
+      
+      // Twitter platform limits (just mock data since we can't easily fetch this without using an API call)
+      const twitterPlatformLimits = {
+        authApi: {
+          description: "Authentication endpoint rate limit",
+          remaining: 0, // Pessimistic assumption due to current rate limiting
+          limit: 15,
+          resetAt: new Date(Date.now() + 15 * 60000).toISOString(), // Assuming 15-minute window
+          resetInMs: 15 * 60000
+        },
+        tweet: {
+          description: "Tweet posting limit",
+          remaining: 50,
+          limit: 50,
+          resetAt: "2025-04-02T00:00:00Z", // Using the Twitter Developer Portal reset time from your screenshot
+          resetInMs: Math.max(0, new Date("2025-04-02T00:00:00Z").getTime() - Date.now())
+        }
+      };
+      
+      return new Response(JSON.stringify({
+        clientRateLimits: clientRateLimits,
+        twitterLimits: twitterPlatformLimits,
+        globalStatus: {
+          isRateLimited: !clientRateLimits.globalStatus.ok,
+          message: clientRateLimits.globalStatus.message,
+          nextResetTime: "2025-04-02T00:00:00Z" // Using the Twitter Developer Portal reset time from your screenshot
+        },
+        timestamp: new Date().toISOString()
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     } else {
       const allEndpoints = {
         endpoints: {

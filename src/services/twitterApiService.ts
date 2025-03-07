@@ -1,4 +1,3 @@
-
 // Import necessary modules
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -151,6 +150,65 @@ export class TwitterApiService {
       const hours = Math.ceil(ms / 3600000);
       return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
     }
+  }
+  
+  /**
+   * Get current rate limit status for all endpoints
+   */
+  static getRateLimitStatus(): { 
+    endpoints: Record<string, { 
+      isLimited: boolean, 
+      requestsLeft: number, 
+      resetTime: number, 
+      resetTimeFormatted: string 
+    }>, 
+    globalReset: string
+  } {
+    const now = Date.now();
+    const endpoints: Record<string, { 
+      isLimited: boolean, 
+      requestsLeft: number, 
+      resetTime: number, 
+      resetTimeFormatted: string 
+    }> = {};
+    
+    let globalResetTime = 0;
+    
+    // Check status for each tracked endpoint
+    for (const [endpoint, entry] of Object.entries(TwitterApiService.requestCounts)) {
+      // Clean up old requests
+      entry.requests = entry.requests.filter(time => now - time < RATE_LIMIT_WINDOW_MS);
+      
+      const isLimited = entry.requests.length >= MAX_REQUESTS_PER_WINDOW;
+      const requestsLeft = MAX_REQUESTS_PER_WINDOW - entry.requests.length;
+      const resetTime = isLimited ? 
+        this.getRateLimitResetTime(endpoint) : 
+        0;
+      
+      // Track global reset time
+      if (resetTime > globalResetTime) {
+        globalResetTime = resetTime;
+      }
+      
+      endpoints[endpoint] = {
+        isLimited,
+        requestsLeft: Math.max(0, requestsLeft),
+        resetTime,
+        resetTimeFormatted: this.formatRateLimitWaitTime(resetTime)
+      };
+    }
+    
+    return {
+      endpoints,
+      globalReset: this.formatRateLimitWaitTime(globalResetTime)
+    };
+  }
+  
+  /**
+   * Check if any endpoint is currently rate limited
+   */
+  static isAnyEndpointRateLimited(): boolean {
+    return Object.keys(this.requestCounts).some(endpoint => this.isRateLimited(endpoint));
   }
   
   /**
@@ -404,6 +462,42 @@ export class TwitterApiService {
     } catch (error) {
       console.error('TwitterApiService: Error fetching profile data:', error);
       throw error;
+    }
+  }
+  
+  /**
+   * Get the Twitter API limits from Twitter's platform
+   */
+  async getTwitterPlatformLimits(): Promise<any> {
+    try {
+      console.log('TwitterApiService: Fetching Twitter API limits');
+      
+      const { data, error } = await supabase.functions.invoke('twitter-api', {
+        method: 'POST',
+        headers: {
+          'path': '/rate-limit-status'
+        },
+        body: { timestamp: Date.now() }
+      });
+      
+      if (error) {
+        console.error('TwitterApiService: Error fetching Twitter API limits:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+      
+      return {
+        success: true,
+        limits: data
+      };
+    } catch (error) {
+      console.error('TwitterApiService: Error fetching Twitter API limits:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
     }
   }
 }

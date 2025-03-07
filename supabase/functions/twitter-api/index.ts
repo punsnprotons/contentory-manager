@@ -62,6 +62,35 @@ serve(async (req) => {
 
     console.log(`[TWITTER-API] Publishing content with user: ${user.id}`);
 
+    // Handle new rate-limit-status endpoint
+    if (path === '/rate-limit-status') {
+      console.log('[TWITTER-API] Fetching rate limit status');
+      
+      try {
+        const { data, error } = await supabaseClient.functions.invoke(
+          'twitter-integration',
+          {
+            method: 'POST',
+            body: { 
+              endpoint: 'rate-limits'
+            }
+          }
+        );
+
+        if (error) {
+          console.error('[TWITTER-API] Error fetching rate limit status:', error);
+          throw new Error(`Failed to fetch rate limit status: ${error.message}`);
+        }
+
+        return new Response(JSON.stringify(data), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (error) {
+        console.error('[TWITTER-API] Error in rate limit status:', error);
+        throw error;
+      }
+    }
+
     // Verify Twitter environment variables
     if (path === '/verify-credentials') {
       console.log('[TWITTER-API] Verifying Twitter credentials');

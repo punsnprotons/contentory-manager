@@ -15,6 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { publishToTwitter } from "@/components/ui/RefreshDataButton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import TwitterRateLimitInfo from "@/components/ui/TwitterRateLimitInfo";
 
 const ContentGeneration: React.FC = () => {
   const [selectedContentType, setSelectedContentType] = useState<ContentType>("text");
@@ -563,6 +564,10 @@ const ContentGeneration: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <div className="mt-6">
+        <TwitterRateLimitInfo />
+      </div>
     </div>
   );
 };
