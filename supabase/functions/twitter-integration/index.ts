@@ -1,3 +1,6 @@
+
+// Only update the environment variable section at the top of the file, leaving the rest intact
+
 import { createHmac } from "node:crypto";
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
@@ -6,7 +9,15 @@ const API_KEY = Deno.env.get("TWITTER_API_KEY")?.trim();
 const API_SECRET = Deno.env.get("TWITTER_API_SECRET")?.trim();
 const ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
 const ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")?.trim();
-const CALLBACK_URL = "https://fxzamjowvpnyuxthusib.supabase.co/functions/v1/twitter-integration/callback";
+const CALLBACK_URL = Deno.env.get("TWITTER_CALLBACK_URL") || "https://fxzamjowvpnyuxthusib.supabase.co/functions/v1/twitter-integration/callback";
+
+// Log the environment variable status for debugging
+console.log("[TWITTER-INTEGRATION] Environment variable check:");
+console.log("[TWITTER-INTEGRATION] API_KEY present:", !!API_KEY);
+console.log("[TWITTER-INTEGRATION] API_SECRET present:", !!API_SECRET);
+console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN present:", !!ACCESS_TOKEN);
+console.log("[TWITTER-INTEGRATION] ACCESS_TOKEN_SECRET present:", !!ACCESS_TOKEN_SECRET);
+console.log("[TWITTER-INTEGRATION] CALLBACK_URL:", CALLBACK_URL);
 
 // CORS headers for browser requests
 const corsHeaders = {

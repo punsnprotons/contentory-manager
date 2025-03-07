@@ -1,6 +1,28 @@
 
+// Only update the beginning of the file with better debugging
+
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// Log environment variables for debugging
+console.log("[TWITTER-API] Function starting");
+console.log("[TWITTER-API] SUPABASE_URL present:", !!Deno.env.get('SUPABASE_URL'));
+console.log("[TWITTER-API] SUPABASE_ANON_KEY present:", !!Deno.env.get('SUPABASE_ANON_KEY'));
+
+// Check if the Twitter API keys are properly set in the environment
+console.log("[TWITTER-API] Checking if Twitter API keys are available via secrets:");
+const twitterApiKeys = [
+  "TWITTER_API_KEY", 
+  "TWITTER_API_SECRET", 
+  "TWITTER_ACCESS_TOKEN", 
+  "TWITTER_ACCESS_TOKEN_SECRET"
+];
+
+// Not logging the actual values for security, just checking if they exist
+for (const key of twitterApiKeys) {
+  const valueExists = !!Deno.env.get(key);
+  console.log(`[TWITTER-API] ${key} is ${valueExists ? 'set' : 'NOT SET'}`);
+}
 
 // CORS headers for browser requests
 const corsHeaders = {

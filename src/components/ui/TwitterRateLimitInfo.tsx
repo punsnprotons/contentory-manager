@@ -7,6 +7,9 @@ import { TwitterApiService } from '@/services/twitterApiService';
 import { getCurrentSession } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+// Define the constant here to keep it in sync with the service
+const MAX_REQUESTS_PER_WINDOW = 3;
+
 export function TwitterRateLimitInfo() {
   const [isLoading, setIsLoading] = useState(false);
   const [rateLimitInfo, setRateLimitInfo] = useState<any>(null);
@@ -176,8 +179,5 @@ export function TwitterRateLimitInfo() {
     </Card>
   );
 }
-
-// Define the constant here to keep it in sync with the service
-const MAX_REQUESTS_PER_WINDOW = 3;
 
 export default TwitterRateLimitInfo;
