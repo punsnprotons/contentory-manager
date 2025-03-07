@@ -2,7 +2,7 @@
 // Update the Twitter API edge function to use OAuth 1.0a for simplicity
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { createHmac } from "crypto";
+import { createHmac } from "https://deno.land/std/node/crypto.ts";
 
 // Enhanced debugging for environment variables
 console.log("[TWITTER-API] Function starting with OAuth 1.0a");
