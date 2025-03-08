@@ -32,7 +32,7 @@ const queryClient = new QueryClient({
 // Separate routes component to use location hooks safely
 function AppRoutes() {
   const location = useLocation();
-  const { user, isLoading } = useAuth();
+  const { user, loading } = useAuth();
   
   useEffect(() => {
     // Check if the current URL contains an Instagram authorization code
@@ -42,7 +42,7 @@ function AppRoutes() {
     if (code) {
       console.log('Detected Instagram auth code in URL, handling redirect');
       handleInstagramAuthRedirect();
-    } else if (user && !isLoading) {
+    } else if (user && !loading) {
       // Only verify Instagram connection when we have a valid user
       // Verify Instagram connection on app load (quietly in background)
       checkInstagramConnection().then(connected => {
@@ -51,7 +51,7 @@ function AppRoutes() {
         console.error('Error checking Instagram connection on app load:', error);
       });
     }
-  }, [location, user, isLoading]);
+  }, [location, user, loading]);
 
   return (
     <Routes>
