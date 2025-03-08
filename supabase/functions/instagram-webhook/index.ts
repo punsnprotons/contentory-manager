@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 // This should match the verify token configured in your Meta app
+// IMPORTANT: Use this exact value in the Instagram Developer Portal
 const VERIFY_TOKEN = 'my_custom_token_123';
 
 serve(async (req) => {
@@ -28,6 +29,7 @@ serve(async (req) => {
       const challenge = url.searchParams.get('hub.challenge');
 
       console.log(`[INSTAGRAM-WEBHOOK] Verification attempt - Mode: ${mode}, Token: ${token}, Challenge: ${challenge}`);
+      console.log(`[INSTAGRAM-WEBHOOK] Expected token: ${VERIFY_TOKEN}`);
 
       // Check if token and mode is correct
       if (mode === 'subscribe' && token === VERIFY_TOKEN) {
