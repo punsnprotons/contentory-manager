@@ -1,4 +1,3 @@
-
 // Instagram integration edge function
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
@@ -63,6 +62,9 @@ serve(async (req) => {
         }
       );
     }
+
+    // Debug: Log the redirect URI being used
+    console.log("[INSTAGRAM-INTEGRATION] Using redirect URI:", INSTAGRAM_REDIRECT_URI);
 
     // Handle different actions
     switch (action) {

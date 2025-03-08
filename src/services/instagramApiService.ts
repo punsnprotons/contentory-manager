@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -300,6 +299,18 @@ export const handleInstagramAuthRedirect = async (): Promise<void> => {
   // Check if the current URL contains an authorization code
   const urlParams = new URLSearchParams(window.location.search);
   const code = urlParams.get('code');
+  const error = urlParams.get('error'); // Also check for error from Instagram
+  
+  // Log any errors from Instagram
+  if (error) {
+    console.error('Instagram auth error:', error, 'Error reason:', urlParams.get('error_reason'));
+    toast.error(`Instagram connection error: ${error}`);
+    
+    // Clean URL
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, document.title, cleanUrl);
+    return;
+  }
   
   if (code) {
     console.log('Processing Instagram auth code:', code);
