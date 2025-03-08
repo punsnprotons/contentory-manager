@@ -169,6 +169,27 @@ export class InstagramApiService {
       throw error;
     }
   }
+  
+  async setupWebhook(): Promise<boolean> {
+    try {
+      const { data, error } = await supabase.functions.invoke('instagram-integration', {
+        method: 'POST',
+        body: { action: 'setup_webhook' }
+      });
+      
+      if (error) {
+        console.error('Error setting up Instagram webhook:', error);
+        throw error;
+      }
+      
+      console.log('Instagram webhook setup result:', data);
+      return data?.success || false;
+    } catch (error) {
+      console.error('Error setting up Instagram webhook:', error);
+      toast.error('Failed to set up Instagram webhook');
+      return false;
+    }
+  }
 }
 
 // Helper function to check if an Instagram connection exists
@@ -217,6 +238,31 @@ export const publishToInstagram = async (content: string, mediaUrl?: string): Pr
     return { success: true };
   } catch (error) {
     console.error('Error publishing to Instagram:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'An unexpected error occurred'
+    };
+  }
+};
+
+// Helper function to set up Instagram webhook
+export const setupInstagramWebhook = async (): Promise<{ success: boolean, message?: string, error?: string }> => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session?.user?.id) {
+      return { success: false, error: 'Authentication required' };
+    }
+    
+    const instagramService = new InstagramApiService(session.user.id);
+    const success = await instagramService.setupWebhook();
+    
+    return { 
+      success, 
+      message: success ? 'Instagram webhook setup successfully' : 'Failed to set up Instagram webhook'
+    };
+  } catch (error) {
+    console.error('Error setting up Instagram webhook:', error);
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'An unexpected error occurred'

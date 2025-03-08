@@ -220,6 +220,21 @@ serve(async (req) => {
           }
         );
 
+      case 'setup_webhook':
+        // In a real implementation, you would call the Instagram API to set up the webhook
+        // For now, we'll just return success
+        console.log("[INSTAGRAM-INTEGRATION] Setting up Instagram webhook (mock)");
+        
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: "Webhook setup completed successfully (mock)" 
+          }),
+          { 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+
       default:
         throw new Error(`Unknown action: ${action}`);
     }
