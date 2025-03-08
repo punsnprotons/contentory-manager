@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { checkInstagramConnection, InstagramApiService } from '@/services/instagramApiService';
 import { useAuth } from '@/hooks/useAuth';
@@ -52,7 +51,7 @@ const InstagramConnectionStatus = ({ onConnected, minimal = false }: InstagramCo
     try {
       setIsConnecting(true);
       setConnectionError(null);
-      const instagramService = await InstagramApiService.create({ user });
+      const instagramService = await InstagramApiService.create({ user: { id: user.id } });
       
       if (!instagramService) {
         throw new Error('Failed to initialize Instagram service');
