@@ -88,9 +88,8 @@ serve(async (req) => {
         
         console.log("[INSTAGRAM-INTEGRATION] Processing callback with code:", code);
         
-        // Exchange the code for an access token - in a real implementation
-        // This is currently mocked for demonstration purposes
-        console.log("[INSTAGRAM-INTEGRATION] Exchanging code for access token");
+        // In a real implementation, you would exchange the code for an access token
+        // For now, simulate a successful token exchange
         
         // Store the connection in the database
         const { error: connectionError } = await supabase

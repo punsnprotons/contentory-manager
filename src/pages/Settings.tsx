@@ -107,42 +107,6 @@ const Settings = () => {
     };
   }, [session]);
 
-  useEffect(() => {
-    const instagramAuthCode = sessionStorage.getItem('instagram_auth_code');
-    if (instagramAuthCode && session?.user) {
-      console.log('Found Instagram auth code in session storage, processing...');
-      sessionStorage.removeItem('instagram_auth_code');
-      
-      const processInstagramAuth = async () => {
-        try {
-          const { data, error } = await supabase.functions.invoke('instagram-integration', {
-            method: 'POST',
-            body: { 
-              action: 'callback',
-              code: instagramAuthCode
-            }
-          });
-          
-          if (error) {
-            console.error('Error processing Instagram callback:', error);
-            toast.error('Failed to complete Instagram connection');
-            return;
-          }
-          
-          if (data?.success) {
-            toast.success('Successfully connected to Instagram!');
-            await loadConnections();
-          }
-        } catch (error) {
-          console.error('Error processing Instagram auth code:', error);
-          toast.error('Failed to complete Instagram connection');
-        }
-      };
-      
-      processInstagramAuth();
-    }
-  }, [session]);
-
   const loadUserSettings = async () => {
     try {
       console.log("Settings: Loading user settings");
@@ -364,18 +328,13 @@ const Settings = () => {
     
     setLoading(true);
     try {
-      console.log("Settings: Connecting Instagram");
-      const instagramService = new InstagramApiService(session.user.id);
-      toast.info('Initiating Instagram connection...');
+      const instagramAuthUrl = 'https://www.instagram.com/oauth/authorize?enable_fb_login=0&force_authentication=1&client_id=660333133139704&redirect_uri=https://contentory-manager.lovable.app/&response_type=code&scope=instagram_business_basic%2Cinstagram_business_manage_messages%2Cinstagram_business_manage_comments%2Cinstagram_business_content_publish%2Cinstagram_business_manage_insights';
       
-      const connected = await instagramService.connect();
+      console.log("Settings: Opening Instagram authorization URL:", instagramAuthUrl);
       
-      if (connected) {
-        toast.success('Successfully connected to Instagram!');
-        await loadConnections();
-      } else {
-        toast.error('Failed to connect Instagram. Please try again.');
-      }
+      window.open(instagramAuthUrl, '_blank');
+      
+      toast.info('Please complete Instagram authorization in the new window');
     } catch (error) {
       console.error('Error connecting Instagram:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to connect Instagram';

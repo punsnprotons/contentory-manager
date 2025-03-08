@@ -1,105 +1,72 @@
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "@/hooks/useAuth";
+import Index from "./pages/Index";
+import Dashboard from "./pages/Dashboard";
+import ContentGeneration from "./pages/ContentGeneration";
+import PendingContent from "./pages/PendingContent";
+import ContentCalendar from "./pages/ContentCalendar";
+import Analytics from "./pages/Analytics";
+import AIAssistant from "./pages/AIAssistant";
+import Settings from "./pages/Settings";
+import Auth from "./pages/Auth";
+import NotFound from "./pages/NotFound";
+import RequireAuth from "./components/RequireAuth";
 
-import React from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
-import { AuthProvider } from './hooks/useAuth';
-import RequireAuth from './components/RequireAuth';
-import Index from './pages/Index';
-import Auth from './pages/Auth';
-import Dashboard from './pages/Dashboard';
-import Settings from './pages/Settings';
-import NotFound from './pages/NotFound';
-import ContentCalendar from './pages/ContentCalendar';
-import ContentGeneration from './pages/ContentGeneration';
-import PendingContent from './pages/PendingContent';
-import Analytics from './pages/Analytics';
-import AIAssistant from './pages/AIAssistant';
-import './App.css';
-
-const AppRoutes = () => {
-  const location = useLocation();
-  
-  // Handle Instagram OAuth redirect if URL contains a code parameter
-  React.useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('code')) {
-      console.log('Detected auth code in URL, checking for Instagram redirect');
-      import('./services/instagramApiService').then(module => {
-        const InstagramApiService = module.InstagramApiService;
-        InstagramApiService.handleAuthRedirect();
-      });
-    }
-  }, [location]);
-
-  return (
-    <Routes>
-      <Route path="/" element={<Index />} />
-      <Route path="/auth" element={<Auth />} />
-      <Route
-        path="/dashboard"
-        element={
-          <RequireAuth>
-            <Dashboard />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/settings"
-        element={
-          <RequireAuth>
-            <Settings />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/calendar"
-        element={
-          <RequireAuth>
-            <ContentCalendar />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/content/generate"
-        element={
-          <RequireAuth>
-            <ContentGeneration />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/content/pending"
-        element={
-          <RequireAuth>
-            <PendingContent />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/analytics"
-        element={
-          <RequireAuth>
-            <Analytics />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/ai-assistant"
-        element={
-          <RequireAuth>
-            <AIAssistant />
-          </RequireAuth>
-        }
-      />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
-  );
-};
+// Create a client
+const queryClient = new QueryClient();
 
 function App() {
   return (
-    <AuthProvider>
-      <AppRoutes />
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <Routes>
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/" element={<Index />}>
+                <Route index element={<Navigate to="/dashboard" replace />} />
+                <Route path="dashboard" element={<Dashboard />} />
+                <Route 
+                  path="content-generation" 
+                  element={
+                    <RequireAuth>
+                      <ContentGeneration />
+                    </RequireAuth>
+                  } 
+                />
+                <Route 
+                  path="pending-content" 
+                  element={
+                    <RequireAuth>
+                      <PendingContent />
+                    </RequireAuth>
+                  } 
+                />
+                <Route 
+                  path="content-calendar" 
+                  element={
+                    <RequireAuth>
+                      <ContentCalendar />
+                    </RequireAuth>
+                  } 
+                />
+                <Route path="analytics" element={<Analytics />} />
+                <Route path="chat" element={<AIAssistant />} />
+                <Route path="settings" element={<Settings />} />
+              </Route>
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
   );
 }
 
