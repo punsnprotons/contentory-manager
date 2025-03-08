@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { AuthProvider } from "@/hooks/useAuth";
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { useEffect } from "react";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
@@ -32,6 +32,7 @@ const queryClient = new QueryClient({
 // Separate routes component to use location hooks safely
 function AppRoutes() {
   const location = useLocation();
+  const { user, isLoading } = useAuth();
   
   useEffect(() => {
     // Check if the current URL contains an Instagram authorization code
@@ -41,13 +42,16 @@ function AppRoutes() {
     if (code) {
       console.log('Detected Instagram auth code in URL, handling redirect');
       handleInstagramAuthRedirect();
-    } else {
+    } else if (user && !isLoading) {
+      // Only verify Instagram connection when we have a valid user
       // Verify Instagram connection on app load (quietly in background)
       checkInstagramConnection().then(connected => {
         console.log('Instagram connection status on app load:', connected);
+      }).catch(error => {
+        console.error('Error checking Instagram connection on app load:', error);
       });
     }
-  }, [location]);
+  }, [location, user, isLoading]);
 
   return (
     <Routes>
