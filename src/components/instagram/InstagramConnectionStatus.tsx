@@ -4,8 +4,8 @@ import { checkInstagramConnection, InstagramApiService } from '@/services/instag
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Loader2, Instagram, AlertCircle } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2, Instagram, AlertCircle, ExternalLink } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface InstagramConnectionStatusProps {
   onConnected?: () => void;
@@ -123,7 +123,26 @@ const InstagramConnectionStatus = ({ onConnected, minimal = false }: InstagramCo
         {connectionError && (
           <Alert variant="destructive" className="mb-3">
             <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Connection Error</AlertTitle>
             <AlertDescription>{connectionError}</AlertDescription>
+            
+            <div className="mt-2 text-xs">
+              <p>Possible solutions:</p>
+              <ul className="list-disc ml-5 mt-1">
+                <li>Make sure your Instagram App has "Instagram Basic Display" product added</li>
+                <li>Ensure the "basic" permission is approved in the Meta Developer Portal</li>
+                <li>Verify your redirect URI matches exactly in both Supabase and Meta Developer Portal</li>
+                <li>Check that your app is in "Live" mode in the Meta Developer Portal</li>
+              </ul>
+              <a 
+                href="https://developers.facebook.com/apps/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center text-blue-500 hover:text-blue-700 mt-2"
+              >
+                Open Meta Developer Portal <ExternalLink className="h-3 w-3 ml-1" />
+              </a>
+            </div>
           </Alert>
         )}
         
