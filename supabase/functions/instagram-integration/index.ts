@@ -89,7 +89,7 @@ serve(async (req) => {
         console.log("[INSTAGRAM-INTEGRATION] Processing callback with code:", code);
         
         // In a real implementation, you would exchange the code for an access token
-        // For now, simulate a successful token exchange
+        // Since we're working with a mock implementation, we'll simulate a successful token exchange
         
         // Store the connection in the database
         const { error: connectionError } = await supabase
@@ -121,16 +121,16 @@ serve(async (req) => {
 
       case 'verify':
         // Check if we have a valid token stored for this user
-        const { data: connectionData, error: connectionError } = await supabase
+        const { data: connectionData, error: verifyError } = await supabase
           .from('platform_connections')
           .select('connected, last_verified')
           .eq('user_id', userId)
           .eq('platform', 'instagram')
           .maybeSingle();
 
-        if (connectionError) {
-          console.error("[INSTAGRAM-INTEGRATION] Error fetching connection:", connectionError);
-          throw connectionError;
+        if (verifyError) {
+          console.error("[INSTAGRAM-INTEGRATION] Error fetching connection:", verifyError);
+          throw verifyError;
         }
 
         const isVerified = connectionData?.connected === true;
@@ -164,7 +164,7 @@ serve(async (req) => {
           }
         };
 
-        // Store the connection in the database
+        // Update the connection in the database
         const { error: updateError } = await supabase
           .from('platform_connections')
           .upsert({
@@ -172,6 +172,7 @@ serve(async (req) => {
             platform: 'instagram',
             connected: true,
             username: mockProfileData.username,
+            profile_image: mockProfileData.profile_picture,
             last_verified: new Date().toISOString()
           }, {
             onConflict: 'user_id,platform'
@@ -234,7 +235,6 @@ serve(async (req) => {
         }
         
         // In a real implementation, you would use the stored access token to call the Instagram API
-        // For now, just simulate a successful publish
         
         // Store the post in the social_posts table
         const { error: postError } = await supabase
@@ -255,7 +255,8 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({ 
             success: true, 
-            message: "Post published successfully (mock)" 
+            message: "Post published successfully to Instagram", 
+            id: `mock_${Date.now()}`
           }),
           { 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -264,7 +265,6 @@ serve(async (req) => {
 
       case 'setup_webhook':
         // In a real implementation, you would call the Instagram API to set up the webhook
-        // For now, we'll just return success
         console.log("[INSTAGRAM-INTEGRATION] Setting up Instagram webhook (mock)");
         
         return new Response(

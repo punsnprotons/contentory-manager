@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Sparkles, LayoutGrid, Image, Video, AlignLeft, Send, RotateCw, Save } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { publishToTwitter, checkTwitterConnection } from "@/components/ui/RefreshDataButton";
-import { publishToInstagram, checkInstagramConnection } from "@/services/instagramApiService";
+import { publishToInstagram, checkInstagramConnection, InstagramApiService } from "@/services/instagramApiService";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import TwitterRateLimitInfo from "@/components/ui/TwitterRateLimitInfo";
 
@@ -28,13 +29,14 @@ const ContentGeneration: React.FC = () => {
   const [contentId, setContentId] = useState<string | null>(null);
   const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false);
   const [isErrorDialogOpen, setIsErrorDialogOpen] = useState(false);
+  const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
   const [errorDetails, setErrorDetails] = useState<{title: string, message: string, instructions?: string}>({
     title: "",
     message: ""
   });
   
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { generateContent, saveContent, publishContent, scheduleContent, isGenerating, isSaving } = useGenerateContent();
 
   const contentTypes: { value: ContentType; label: string; icon: React.ReactNode }[] = [
@@ -108,6 +110,32 @@ const ContentGeneration: React.FC = () => {
       toast.error("Saving failed", {
         description: error instanceof Error ? error.message : "An unexpected error occurred."
       });
+    }
+  };
+
+  const connectInstagram = async () => {
+    if (!session?.user) {
+      toast.error('You must be logged in to connect Instagram');
+      setIsConnectDialogOpen(false);
+      return;
+    }
+    
+    try {
+      setIsConnectDialogOpen(false);
+      const instagramService = new InstagramApiService(session.user.id);
+      const connected = await instagramService.connect();
+      
+      if (connected) {
+        toast.success('Successfully connected to Instagram!');
+        return true;
+      } else {
+        toast.error('Failed to connect to Instagram');
+        return false;
+      }
+    } catch (error) {
+      console.error('Error connecting to Instagram:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to connect to Instagram');
+      return false;
     }
   };
 
@@ -208,6 +236,7 @@ const ContentGeneration: React.FC = () => {
           return;
         }
         
+        toast.dismiss();
         toast.success('Successfully published to Twitter!');
       } else if (selectedPlatform === 'instagram') {
         toast.loading('Publishing to Instagram...');
@@ -218,18 +247,18 @@ const ContentGeneration: React.FC = () => {
         if (!isConnected) {
           toast.dismiss();
           toast.error('Instagram connection not found or invalid', {
-            description: 'Please connect your Instagram account in the Settings page first.'
+            description: 'Please connect your Instagram account before publishing.'
           });
-          navigate('/settings?connect=instagram');
+          
+          // Ask user if they want to connect now
+          setIsConnectDialogOpen(true);
           return;
         }
         
         try {
+          // Verify Instagram connection
           const verifyResponse = await supabase.functions.invoke('instagram-integration', {
             method: 'POST',
-            headers: {
-              path: '/verify'
-            },
             body: { action: 'verify' }
           });
           
@@ -242,11 +271,21 @@ const ContentGeneration: React.FC = () => {
             return;
           }
           
+          if (!verifyResponse.data?.verified) {
+            toast.dismiss();
+            toast.error('Instagram connection not found or invalid', {
+              description: 'Please connect your Instagram account before publishing.'
+            });
+            setIsConnectDialogOpen(true);
+            return;
+          }
+          
           console.log('Instagram credentials verification result:', verifyResponse.data);
         } catch (verifyError) {
           console.error('Error during Instagram credentials verification:', verifyError);
         }
         
+        // Publish to Instagram
         const instagramResult = await publishToInstagram(generatedContent, mediaUrl);
         
         if (!instagramResult.success) {
@@ -258,9 +297,11 @@ const ContentGeneration: React.FC = () => {
           return;
         }
         
+        toast.dismiss();
         toast.success('Successfully published to Instagram!');
       }
       
+      // Save the content to the database if it hasn't been saved already
       if (!contentId) {
         const id = await saveContent({
           content: generatedContent,
@@ -282,6 +323,7 @@ const ContentGeneration: React.FC = () => {
       navigate("/pending-content");
     } catch (error) {
       console.error("Error publishing content:", error);
+      toast.dismiss();
       
       if (error instanceof Error && error.message.includes('rate limit')) {
         toast.error('Rate limit exceeded', {
@@ -623,6 +665,37 @@ const ContentGeneration: React.FC = () => {
             
             <div className="flex justify-end">
               <Button onClick={() => setIsErrorDialogOpen(false)}>Close</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog open={isConnectDialogOpen} onOpenChange={setIsConnectDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Connect to Instagram</DialogTitle>
+            <DialogDescription>
+              You need to connect your Instagram account before you can publish content.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="bg-blue-50 p-4 rounded-md border border-blue-200">
+              <h3 className="font-medium text-blue-800 mb-2">What happens next:</h3>
+              <ol className="list-decimal list-inside text-blue-700 space-y-2">
+                <li>You'll be redirected to Instagram to authorize this app</li>
+                <li>After authorization, you'll be returned to this app</li>
+                <li>Your connection will be saved for future publishing</li>
+              </ol>
+            </div>
+            
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={() => setIsConnectDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={connectInstagram}>
+                Connect to Instagram
+              </Button>
             </div>
           </div>
         </DialogContent>

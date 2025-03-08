@@ -38,6 +38,9 @@ export class InstagramApiService {
       
       console.log('Opening Instagram authorization URL:', data.authUrl);
       
+      // Store that we're expecting an Instagram callback
+      sessionStorage.setItem('instagram_auth_pending', 'true');
+      
       // Open authorization URL in a popup window
       const width = 600;
       const height = 700;
@@ -87,6 +90,10 @@ export class InstagramApiService {
                   toast.success('Successfully connected to Instagram!');
                   // Fetch profile data to store in database
                   await this.fetchProfileData();
+                  
+                  // Clear the pending flag
+                  sessionStorage.removeItem('instagram_auth_pending');
+                  
                   resolve(true);
                   return;
                 }
@@ -108,6 +115,7 @@ export class InstagramApiService {
         // Set a timeout to resolve the promise if no callback is received
         setTimeout(() => {
           window.removeEventListener('message', messageHandler);
+          sessionStorage.removeItem('instagram_auth_pending');
           toast.error('Instagram connection timed out. Please try again.');
           resolve(false);
         }, 120000); // 2 minutes timeout
@@ -263,44 +271,77 @@ export class InstagramApiService {
       return false;
     }
   }
+}
+
+// Helper function to handle Instagram OAuth redirect
+export const handleInstagramAuthRedirect = async (): Promise<void> => {
+  // Check if the current URL contains an authorization code
+  const urlParams = new URLSearchParams(window.location.search);
+  const code = urlParams.get('code');
   
-  // Create a method to handle OAuth callback from redirect
-  static handleAuthRedirect(): void {
-    // Check if the current URL contains an authorization code
-    const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
+  if (code) {
+    console.log('Processing Instagram auth code:', code);
     
-    if (code) {
-      console.log('Detected Instagram auth code in URL:', code);
+    // Clean URL to remove code
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, document.title, cleanUrl);
+    
+    // Check if we're in a popup window
+    if (window.opener && !window.opener.closed) {
+      // Send message to parent window
+      window.opener.postMessage({
+        type: 'INSTAGRAM_AUTH_SUCCESS',
+        code: code
+      }, window.location.origin);
       
-      // Remove the code from the URL to prevent it from being visible
-      const cleanUrl = window.location.pathname;
-      window.history.replaceState({}, document.title, cleanUrl);
-      
-      // Post message to parent window if this is opened in a popup
-      if (window.opener && !window.opener.closed) {
-        window.opener.postMessage({
-          type: 'INSTAGRAM_AUTH_SUCCESS',
-          code: code
-        }, window.location.origin);
+      // Close popup window
+      window.close();
+    } else {
+      // If not in a popup (e.g., direct redirect), process the code directly
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
         
-        // Close the popup window
-        window.close();
-      } else {
-        // If not in a popup, we need to handle the token exchange directly
-        // This would typically be used when redirecting the main window
-        toast.success('Instagram authorization successful');
-        toast.info('Processing your Instagram connection...');
+        if (!session?.user?.id) {
+          console.error('No user session available to process Instagram auth');
+          toast.error('Authentication required to connect Instagram');
+          return;
+        }
         
-        // Store the code in sessionStorage to be used when the app loads
-        sessionStorage.setItem('instagram_auth_code', code);
+        toast.loading('Processing Instagram connection...');
         
-        // Redirect to settings page
-        window.location.href = '/settings';
+        const instagramService = new InstagramApiService(session.user.id);
+        
+        // Process the OAuth callback
+        const { data, error } = await supabase.functions.invoke('instagram-integration', {
+          method: 'POST',
+          body: { 
+            action: 'callback',
+            code: code
+          }
+        });
+        
+        toast.dismiss();
+        
+        if (error) {
+          console.error('Error processing Instagram callback:', error);
+          toast.error('Failed to complete Instagram connection');
+          return;
+        }
+        
+        if (data?.success) {
+          // Fetch profile data after successful connection
+          await instagramService.fetchProfileData();
+          toast.success('Successfully connected to Instagram!');
+        } else {
+          toast.error('Failed to connect to Instagram');
+        }
+      } catch (error) {
+        console.error('Error processing Instagram auth code:', error);
+        toast.error('Failed to process Instagram connection');
       }
     }
   }
-}
+};
 
 // Helper function to check if an Instagram connection exists
 export const checkInstagramConnection = async (): Promise<boolean> => {
@@ -334,6 +375,13 @@ export const publishToInstagram = async (content: string, mediaUrl?: string): Pr
       return { success: false, error: 'Authentication required' };
     }
     
+    // First verify that Instagram is connected
+    const isConnected = await checkInstagramConnection();
+    
+    if (!isConnected) {
+      return { success: false, error: 'Instagram is not connected' };
+    }
+    
     const instagramService = new InstagramApiService(session.user.id);
     const result = await instagramService.publishPost(content, mediaUrl);
     
@@ -345,7 +393,7 @@ export const publishToInstagram = async (content: string, mediaUrl?: string): Pr
       };
     }
     
-    return { success: true };
+    return { success: true, message: result.message || 'Successfully published to Instagram' };
   } catch (error) {
     console.error('Error publishing to Instagram:', error);
     return { 
@@ -379,9 +427,3 @@ export const setupInstagramWebhook = async (): Promise<{ success: boolean, messa
     };
   }
 };
-
-// Call handleAuthRedirect when the service is imported, to handle OAuth redirects
-if (typeof window !== 'undefined') {
-  // Only run in browser context
-  InstagramApiService.handleAuthRedirect();
-}
