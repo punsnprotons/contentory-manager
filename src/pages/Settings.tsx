@@ -328,17 +328,13 @@ const Settings = () => {
     
     setLoading(true);
     try {
-      console.log("Settings: Connecting Instagram");
-      const instagramService = new InstagramApiService(session.user.id);
-      toast.info('Verifying Instagram credentials...');
+      const instagramAuthUrl = 'https://www.instagram.com/oauth/authorize?enable_fb_login=0&force_authentication=1&client_id=660333133139704&redirect_uri=https://contentory-manager.lovable.app/&response_type=code&scope=instagram_business_basic%2Cinstagram_business_manage_messages%2Cinstagram_business_manage_comments%2Cinstagram_business_content_publish%2Cinstagram_business_manage_insights';
       
-      const connected = await instagramService.connect();
+      console.log("Settings: Opening Instagram authorization URL:", instagramAuthUrl);
       
-      if (connected) {
-        toast.success('Successfully initiated Instagram connection. Please complete authorization in the popup window.');
-      } else {
-        toast.error('Failed to connect Instagram. Please try again.');
-      }
+      window.open(instagramAuthUrl, '_blank');
+      
+      toast.info('Please complete Instagram authorization in the new window');
     } catch (error) {
       console.error('Error connecting Instagram:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to connect Instagram';
