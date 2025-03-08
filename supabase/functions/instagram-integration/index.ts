@@ -1,3 +1,4 @@
+
 // Instagram integration edge function
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
@@ -65,12 +66,15 @@ serve(async (req) => {
 
     // Debug: Log the redirect URI being used
     console.log("[INSTAGRAM-INTEGRATION] Using redirect URI:", INSTAGRAM_REDIRECT_URI);
+    
+    // Important: verify that this redirect URI matches exactly what's in your Meta Developer Portal
+    console.log("[INSTAGRAM-INTEGRATION] Make sure this redirect URI is authorized in Meta Developer Portal");
 
     // Handle different actions
     switch (action) {
       case 'authorize':
         // Generate Instagram business authorization URL with expanded permissions
-        const businessAuthUrl = `https://www.instagram.com/oauth/authorize?enable_fb_login=0&force_authentication=1&client_id=${INSTAGRAM_APP_ID}&redirect_uri=${encodeURIComponent(INSTAGRAM_REDIRECT_URI)}&response_type=code&scope=instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish,instagram_business_manage_insights`;
+        const businessAuthUrl = `https://www.instagram.com/oauth/authorize?client_id=${INSTAGRAM_APP_ID}&redirect_uri=${encodeURIComponent(INSTAGRAM_REDIRECT_URI)}&scope=user_profile,user_media&response_type=code`;
         
         console.log("[INSTAGRAM-INTEGRATION] Generated business auth URL:", businessAuthUrl);
         return new Response(
