@@ -1,4 +1,3 @@
-
 // Instagram integration edge function
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
@@ -73,12 +72,13 @@ serve(async (req) => {
     // Handle different actions
     switch (action) {
       case 'authorize':
-        // Generate Instagram business authorization URL with expanded permissions
-        const businessAuthUrl = `https://www.instagram.com/oauth/authorize?client_id=${INSTAGRAM_APP_ID}&redirect_uri=${encodeURIComponent(INSTAGRAM_REDIRECT_URI)}&scope=user_profile,user_media&response_type=code`;
+        // Generate Instagram authorization URL with the correct scopes
+        // Use instagram_basic scope which is typically approved for basic Instagram API access
+        const authUrl = `https://www.instagram.com/oauth/authorize?client_id=${INSTAGRAM_APP_ID}&redirect_uri=${encodeURIComponent(INSTAGRAM_REDIRECT_URI)}&scope=instagram_basic&response_type=code`;
         
-        console.log("[INSTAGRAM-INTEGRATION] Generated business auth URL:", businessAuthUrl);
+        console.log("[INSTAGRAM-INTEGRATION] Generated auth URL:", authUrl);
         return new Response(
-          JSON.stringify({ authUrl: businessAuthUrl }),
+          JSON.stringify({ authUrl: authUrl }),
           { 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
           }

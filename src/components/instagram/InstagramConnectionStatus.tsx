@@ -4,7 +4,8 @@ import { checkInstagramConnection, InstagramApiService } from '@/services/instag
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Loader2, Instagram } from 'lucide-react';
+import { Loader2, Instagram, AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface InstagramConnectionStatusProps {
   onConnected?: () => void;
@@ -15,6 +16,7 @@ const InstagramConnectionStatus = ({ onConnected, minimal = false }: InstagramCo
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -25,12 +27,14 @@ const InstagramConnectionStatus = ({ onConnected, minimal = false }: InstagramCo
         setIsLoading(true);
         const connected = await checkInstagramConnection();
         setIsConnected(connected);
+        setConnectionError(null);
         
         if (connected && onConnected) {
           onConnected();
         }
       } catch (error) {
         console.error('Error checking Instagram connection:', error);
+        setConnectionError('Failed to verify Instagram connection status');
       } finally {
         setIsLoading(false);
       }
@@ -47,6 +51,7 @@ const InstagramConnectionStatus = ({ onConnected, minimal = false }: InstagramCo
 
     try {
       setIsConnecting(true);
+      setConnectionError(null);
       const instagramService = await InstagramApiService.create({ user });
       
       if (!instagramService) {
@@ -59,10 +64,13 @@ const InstagramConnectionStatus = ({ onConnected, minimal = false }: InstagramCo
         setIsConnected(true);
         if (onConnected) onConnected();
       } else {
+        setConnectionError('Instagram connection failed. Please check app permissions and try again.');
         toast.error('Failed to connect to Instagram. Please try again.');
       }
     } catch (error) {
       console.error('Error connecting to Instagram:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setConnectionError(`Instagram connection error: ${errorMessage}`);
       toast.error('Error connecting to Instagram');
     } finally {
       setIsConnecting(false);
@@ -111,6 +119,14 @@ const InstagramConnectionStatus = ({ onConnected, minimal = false }: InstagramCo
           <Instagram className="h-5 w-5 text-gray-600 dark:text-gray-400 mr-2" />
           <span className="text-gray-700 dark:text-gray-300">Not connected to Instagram</span>
         </div>
+        
+        {connectionError && (
+          <Alert variant="destructive" className="mb-3">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{connectionError}</AlertDescription>
+          </Alert>
+        )}
+        
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
           Connect your Instagram account to publish content directly from this app.
         </p>
