@@ -368,7 +368,7 @@ export const handleInstagramAuthRedirect = async (): Promise<void> => {
 };
 
 // Helper function to check if an Instagram connection exists
-export const checkInstagramConnection = async (): Promise<boolean> {
+export const checkInstagramConnection = async (): Promise<boolean> => {
   // Check local storage first for quick response
   const localConnected = localStorage.getItem('instagram_connected') === 'true';
   
