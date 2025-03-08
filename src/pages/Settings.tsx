@@ -1,657 +1,207 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import React from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
-import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
-import { TwitterApiService } from '@/services/twitterApiService';
-import { InstagramApiService } from '@/services/instagramApiService';
-import { toast } from 'sonner';
-import { PlusCircle, Twitter, Instagram, CheckCircle, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
-
-type SocialPlatform = 'twitter' | 'instagram';
-
-interface Connection {
-  platform: SocialPlatform;
-  connected: boolean;
-  username?: string;
-  profile_image?: string;
-  last_verified?: string;
-}
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useToast } from "@/hooks/use-toast";
+import { Twitter } from "lucide-react";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Switch } from "@/components/ui/switch";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import InstagramConnectionStatus from '@/components/instagram/InstagramConnectionStatus';
 
 const Settings = () => {
-  const [loading, setLoading] = useState(false);
-  const [importLoading, setImportLoading] = useState(false);
-  const [notifications, setNotifications] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
-  const [connections, setConnections] = useState<Connection[]>([]);
-  const [pageLoading, setPageLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [rateLimited, setRateLimited] = useState(false);
-  const { session } = useAuth();
-  
-  useEffect(() => {
-    if (session?.user) {
-      console.log("Settings: Session user available, loading settings", session.user);
-      setPageLoading(true);
-      setError(null);
-      
-      Promise.all([
-        loadUserSettings(),
-        loadConnections()
-      ])
-      .catch(err => {
-        console.error("Error initializing settings page:", err);
-        setError("Failed to load settings. Please try again.");
-      })
-      .finally(() => {
-        setPageLoading(false);
-      });
-    } else {
-      console.log("Settings: No user session available");
-      setPageLoading(false);
-      setConnections([
-        { platform: 'twitter', connected: false },
-        { platform: 'instagram', connected: false }
-      ]);
-    }
-  }, [session]);
+  const { toast } = useToast();
 
-  useEffect(() => {
-    const hasAuthParam = window.location.search.includes('auth=success');
+  const formSchema = z.object({
+    name: z.string().min(2, {
+      message: "Name must be at least 2 characters.",
+    }),
+  })
 
-    if (hasAuthParam) {
-      const newUrl = window.location.pathname;
-      window.history.replaceState({}, document.title, newUrl);
-      
-      toast.success("Successfully connected to Twitter!");
-      
-      if (session?.user) {
-        console.log("Settings: Auth success detected in URL, refreshing connections");
-        loadConnections();
-      }
-    }
-  }, [session]);
-  
-  useEffect(() => {
-    const messageHandler = (event: MessageEvent) => {
-      console.log("Settings: Received message event:", event);
-      
-      if (event.data && event.data.type === 'TWITTER_AUTH_SUCCESS') {
-        console.log("Settings: Auth success message received, refreshing connections");
-        
-        if (event.data.data && event.data.data.success && session?.user) {
-          const twitterService = new TwitterApiService(session.user.id);
-          
-          twitterService.fetchProfileData()
-            .then(() => {
-              toast.success("Successfully connected to Twitter!");
-              loadConnections();
-            })
-            .catch(err => {
-              console.error("Error storing Twitter connection:", err);
-              toast.error("Failed to complete Twitter connection");
-            });
-        }
-      }
-    };
-    
-    window.addEventListener('message', messageHandler);
-    
-    return () => {
-      window.removeEventListener('message', messageHandler);
-    };
-  }, [session]);
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: "Pedro Duarte",
+    },
+  })
 
-  const loadUserSettings = async () => {
-    try {
-      console.log("Settings: Loading user settings");
-      const { data, error } = await supabase
-        .from('user_settings')
-        .select('*')
-        .eq('user_id', session?.user.id)
-        .single();
-        
-      if (error) {
-        if (error.code === 'PGRST116') {
-          console.log("Settings: No user settings found, using defaults");
-          return;
-        }
-        
-        console.error('Error loading user settings:', error);
-        throw error;
-      }
-      
-      if (data) {
-        console.log("Settings: User settings loaded", data);
-        setNotifications(data.enable_notifications);
-        setDarkMode(data.theme === 'dark');
-      }
-    } catch (error) {
-      console.error('Error loading user settings:', error);
-      toast.error("Failed to load user settings");
-    }
-  };
-  
-  const loadConnections = useCallback(async () => {
-    try {
-      console.log("Settings: Loading connections");
-      
-      if (!session?.user) {
-        console.log("Settings: No session available, can't load connections");
-        setConnections([
-          { platform: 'twitter', connected: false },
-          { platform: 'instagram', connected: false }
-        ]);
-        return;
-      }
-      
-      console.log("Settings: Checking platform connections for user:", session.user.id);
-      
-      const { data, error } = await supabase
-        .from('platform_connections')
-        .select('platform, connected, username, profile_image, last_verified')
-        .eq('user_id', session.user.id);
-        
-      if (error) {
-        console.error('Error loading connections:', error);
-        throw error;
-      }
-      
-      console.log("Settings: Connections data from database:", data);
-      
-      if (data && data.length > 0) {
-        console.log("Settings: Connections loaded", data);
-        const typedConnections = data.map(conn => ({
-          ...conn,
-          platform: conn.platform as SocialPlatform
-        }));
-        
-        const platforms: SocialPlatform[] = ['twitter', 'instagram'];
-        const finalConnections: Connection[] = [];
-        
-        platforms.forEach(platform => {
-          const existingConn = typedConnections.find(conn => conn.platform === platform);
-          if (existingConn) {
-            finalConnections.push(existingConn);
-          } else {
-            finalConnections.push({ platform, connected: false });
-          }
-        });
-        
-        setConnections(finalConnections);
-      } else {
-        console.log("Settings: No connections found, using defaults");
-        setConnections([
-          { platform: 'twitter', connected: false },
-          { platform: 'instagram', connected: false }
-        ]);
-      }
-    } catch (error) {
-      console.error('Error loading connections:', error);
-      toast.error("Failed to load social media connections");
-      setConnections([
-        { platform: 'twitter', connected: false },
-        { platform: 'instagram', connected: false }
-      ]);
-    }
-  }, [session]);
-  
-  const saveSettings = async () => {
-    if (!session?.user) {
-      toast.error("You must be logged in to save settings");
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      console.log("Settings: Saving user settings");
-      const { error } = await supabase
-        .from('user_settings')
-        .upsert({
-          user_id: session.user.id,
-          enable_notifications: notifications,
-          theme: darkMode ? 'dark' : 'light'
-        });
-        
-      if (error) {
-        console.error('Error saving settings:', error);
-        throw error;
-      }
-      
-      console.log("Settings: Settings saved successfully");
-      toast.success('Settings saved successfully');
-    } catch (error) {
-      console.error('Error saving settings:', error);
-      toast.error('Failed to save settings');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const connectTwitter = async () => {
-    if (!session?.user) {
-      toast.error('You must be logged in to connect Twitter');
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      console.log("Settings: Connecting Twitter with OAuth 1.0a");
-      const twitterService = new TwitterApiService(session.user.id);
-      toast.info('Verifying Twitter credentials...');
-      
-      try {
-        const verificationResult = await twitterService.verifyCredentials();
-        
-        if (verificationResult) {
-          toast.success('Successfully connected to Twitter!');
-          
-          try {
-            const profileData = await twitterService.fetchProfileData();
-            console.log("Settings: Profile data fetched:", profileData);
-            
-            await loadConnections();
-          } catch (profileError) {
-            console.error("Error fetching profile data:", profileError);
-          }
-        } else {
-          toast.error('Failed to connect Twitter. Please check your API credentials in Supabase.');
-        }
-      } catch (authError) {
-        console.error('Error connecting Twitter:', authError);
-        const errorMessage = authError instanceof Error ? authError.message : 'Failed to connect Twitter';
-        
-        if (errorMessage.includes('rate limit') || errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
-          toast.error(errorMessage, {
-            duration: 8000,
-          });
-          setRateLimited(true);
-          setTimeout(() => {
-            setRateLimited(false);
-          }, 60000);
-        } else {
-          toast.error(errorMessage);
-        }
-      }
-    } catch (error) {
-      console.error('Error connecting Twitter:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to connect Twitter';
-      toast.error(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const importTwitterTweets = async () => {
-    if (!session?.user) {
-      toast.error('You must be logged in to import tweets');
-      return;
-    }
-    
-    setImportLoading(true);
-    try {
-      console.log("Settings: Importing Twitter tweets");
-      const twitterService = await TwitterApiService.create(session);
-      
-      if (!twitterService) {
-        throw new Error('Could not initialize Twitter service');
-      }
-      
-      const result = await twitterService.fetchUserTweets(50);
-      
-      console.log("Settings: Import result", result);
-      if (result && Array.isArray(result)) {
-        toast.success(`Successfully imported ${result.length} tweets from Twitter`);
-      } else {
-        toast.success('Twitter import completed');
-      }
-      
-      await loadConnections();
-    } catch (error) {
-      console.error('Error importing tweets:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to import tweets');
-    } finally {
-      setImportLoading(false);
-    }
-  };
-
-  const connectInstagram = async () => {
-    if (!session?.user) {
-      toast.error('You must be logged in to connect Instagram');
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      const instagramAuthUrl = 'https://www.instagram.com/oauth/authorize?enable_fb_login=0&force_authentication=1&client_id=660333133139704&redirect_uri=https://contentory-manager.lovable.app/&response_type=code&scope=instagram_business_basic%2Cinstagram_business_manage_messages%2Cinstagram_business_manage_comments%2Cinstagram_business_content_publish%2Cinstagram_business_manage_insights';
-      
-      console.log("Settings: Opening Instagram authorization URL:", instagramAuthUrl);
-      
-      window.open(instagramAuthUrl, '_blank');
-      
-      toast.info('Please complete Instagram authorization in the new window');
-    } catch (error) {
-      console.error('Error connecting Instagram:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to connect Instagram';
-      toast.error(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const importInstagramPosts = async () => {
-    if (!session?.user) {
-      toast.error('You must be logged in to import Instagram posts');
-      return;
-    }
-    
-    setImportLoading(true);
-    try {
-      console.log("Settings: Importing Instagram posts");
-      const instagramService = await InstagramApiService.create(session);
-      
-      if (!instagramService) {
-        throw new Error('Could not initialize Instagram service');
-      }
-      
-      const result = await instagramService.fetchUserPosts(30);
-      
-      console.log("Settings: Import result", result);
-      if (result && Array.isArray(result)) {
-        toast.success(`Successfully imported ${result.length} posts from Instagram`);
-      } else {
-        toast.success('Instagram import completed');
-      }
-      
-      await loadConnections();
-    } catch (error) {
-      console.error('Error importing Instagram posts:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to import posts');
-    } finally {
-      setImportLoading(false);
-    }
-  };
-
-  const fetchTwitterProfile = async () => {
-    if (!session?.user) {
-      toast.error('You must be logged in to fetch profile data');
-      return;
-    }
-    
-    setProfileLoading(true);
-    try {
-      console.log("Settings: Fetching Twitter profile data");
-      const twitterService = await TwitterApiService.create(session);
-      
-      if (!twitterService) {
-        throw new Error('Could not initialize Twitter service');
-      }
-      
-      const profileData = await twitterService.fetchProfileData();
-      
-      console.log("Settings: Profile data fetched", profileData);
-      toast.success('Successfully fetched and stored Twitter profile data');
-      
-      await loadConnections();
-    } catch (error) {
-      console.error('Error fetching Twitter profile:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to fetch profile data');
-    } finally {
-      setProfileLoading(false);
-    }
-  };
-
-  const fetchInstagramProfile = async () => {
-    if (!session?.user) {
-      toast.error('You must be logged in to fetch profile data');
-      return;
-    }
-    
-    setProfileLoading(true);
-    try {
-      console.log("Settings: Fetching Instagram profile data");
-      const instagramService = await InstagramApiService.create(session);
-      
-      if (!instagramService) {
-        throw new Error('Could not initialize Instagram service');
-      }
-      
-      const profileData = await instagramService.fetchProfileData();
-      
-      console.log("Settings: Profile data fetched", profileData);
-      toast.success('Successfully fetched and stored Instagram profile data');
-      
-      await loadConnections();
-    } catch (error) {
-      console.error('Error fetching Instagram profile:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to fetch profile data');
-    } finally {
-      setProfileLoading(false);
-    }
-  };
-
-  if (pageLoading) {
-    return (
-      <div className="container mx-auto py-6 flex justify-center items-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-lg">Loading settings...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="container mx-auto py-6 space-y-8">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        </div>
-        
-        <Card className="border-destructive">
-          <CardContent className="p-6">
-            <div className="flex flex-col items-center gap-4 text-center">
-              <AlertCircle className="h-10 w-10 text-destructive" />
-              <h2 className="text-xl font-semibold">Error Loading Settings</h2>
-              <p>{error}</p>
-              <Button onClick={() => window.location.reload()} variant="outline">
-                Retry
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
+  function onSubmit(values: z.infer<typeof formSchema>) {
+    toast({
+      title: "You submitted the following values:",
+      description: (
+        <pre className="mt-2 w-[340px] rounded-md bg-slate-950 p-4">
+          <code className="text-white">{JSON.stringify(values, null, 2)}</code>
+        </pre>
+      ),
+    })
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-8">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-      </div>
+    <div className="container py-6 space-y-8">
+      <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
       
-      <Tabs defaultValue="general" className="w-full">
-        <TabsList className="mb-4">
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="connections">Connections</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="general" className="space-y-4">
+      <div className="space-y-6">
+        {/* Twitter Connection */}
+        <div className="space-y-2">
+          <h2 className="text-xl font-semibold">Twitter Integration</h2>
+          <p className="text-sm text-muted-foreground">
+            Connect your Twitter account to publish content and view analytics.
+          </p>
           <Card>
             <CardHeader>
-              <CardTitle>General Settings</CardTitle>
-              <CardDescription>Manage your account preferences</CardDescription>
+              <CardTitle>Twitter Account</CardTitle>
+              <CardDescription>
+                Connect your Twitter account to enable posting and analytics.
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="dark-mode" className="flex flex-col space-y-1">
-                  <span>Dark Mode</span>
-                  <span className="text-sm text-muted-foreground">
-                    Enable dark mode for the interface
-                  </span>
-                </Label>
-                <Switch 
-                  id="dark-mode" 
-                  checked={darkMode} 
-                  onCheckedChange={setDarkMode} 
-                />
-              </div>
-              
-              <div className="pt-4">
-                <Button onClick={saveSettings} disabled={loading}>
-                  {loading ? 'Saving...' : 'Save Settings'}
-                </Button>
+            <CardContent>
+              <Button variant="outline" disabled>
+                <Twitter className="w-4 h-4 mr-2" />
+                Connect Twitter (Coming Soon)
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+        
+        {/* Instagram Connection */}
+        <div className="space-y-2">
+          <h2 className="text-xl font-semibold">Instagram Integration</h2>
+          <p className="text-sm text-muted-foreground">
+            Connect your Instagram business account to publish content and view analytics.
+          </p>
+          <InstagramConnectionStatus />
+        </div>
+        
+        {/* Profile */}
+        <div className="space-y-2">
+          <h2 className="text-xl font-semibold">Profile</h2>
+          <Card>
+            <CardHeader>
+              <CardTitle>Edit profile</CardTitle>
+              <CardDescription>
+                Make changes to your profile here. Click save when you're done.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Pedro Duarte" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button type="submit">Submit</Button>
+                </form>
+              </Form>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Appearance */}
+        <div className="space-y-2">
+          <h2 className="text-xl font-semibold">Appearance</h2>
+          <Card>
+            <CardHeader>
+              <CardTitle>Customize appearance</CardTitle>
+              <CardDescription>
+                Customize how the application looks.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+                <div className="col-span-1">
+                  <Label htmlFor="theme">Theme</Label>
+                  <Select>
+                    <SelectTrigger id="theme">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="light">Light</SelectItem>
+                      <SelectItem value="dark">Dark</SelectItem>
+                      <SelectItem value="system">System</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-        
-        <TabsContent value="connections" className="space-y-4">
+        </div>
+
+        {/* Notifications */}
+        <div className="space-y-2">
+          <h2 className="text-xl font-semibold">Notifications</h2>
           <Card>
             <CardHeader>
-              <CardTitle>Social Media Connections</CardTitle>
-              <CardDescription>Connect your social media accounts</CardDescription>
+              <CardTitle>Email Notifications</CardTitle>
+              <CardDescription>
+                Configure when you receive email notifications below.
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {connections.map((connection, index) => (
-                <React.Fragment key={connection.platform}>
-                  {index > 0 && <Separator className="my-4" />}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      {connection.platform === 'twitter' ? (
-                        connection.profile_image ? (
-                          <img 
-                            src={connection.profile_image} 
-                            alt="Twitter profile" 
-                            className="h-10 w-10 rounded-full" 
-                          />
-                        ) : (
-                          <Twitter className="h-8 w-8 text-blue-400" />
-                        )
-                      ) : (
-                        <Instagram className="h-8 w-8 text-pink-500" />
-                      )}
-                      <div>
-                        <p className="font-medium capitalize">{connection.platform}</p>
-                        {connection.connected && connection.username && (
-                          <p className="text-sm text-muted-foreground">
-                            Connected as @{connection.username}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      {connection.connected ? (
-                        <>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={connection.platform === 'twitter' ? fetchTwitterProfile : 
-                                     connection.platform === 'instagram' ? fetchInstagramProfile : undefined}
-                            disabled={profileLoading}
-                          >
-                            {profileLoading ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Updating...
-                              </>
-                            ) : (
-                              <>
-                                <RefreshCw className="mr-2 h-4 w-4" />
-                                Update Profile
-                              </>
-                            )}
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={connection.platform === 'twitter' ? importTwitterTweets : 
-                                     connection.platform === 'instagram' ? importInstagramPosts : undefined}
-                            disabled={importLoading}
-                          >
-                            {importLoading ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Importing...
-                              </>
-                            ) : (
-                              'Import Posts'
-                            )}
-                          </Button>
-                          <CheckCircle className="h-5 w-5 text-green-500" />
-                        </>
-                      ) : (
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={connection.platform === 'twitter' ? connectTwitter : 
-                                   connection.platform === 'instagram' ? connectInstagram : undefined}
-                          disabled={loading || (connection.platform === 'twitter' && rateLimited)}
-                          className={(rateLimited && connection.platform === 'twitter') ? "bg-red-50" : ""}
-                        >
-                          {loading ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Connecting...
-                            </>
-                          ) : rateLimited && connection.platform === 'twitter' ? (
-                            <>
-                              <AlertCircle className="h-4 w-4 mr-2 text-red-500" />
-                              Rate Limited
-                            </>
-                          ) : (
-                            <>
-                              <PlusCircle className="h-4 w-4 mr-2" />
-                              Connect
-                            </>
-                          )}
-                        </Button>
-                      )}
-                    </div>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between rounded-md border p-3 shadow-sm">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium leading-none">
+                      Push Notifications
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Send push notifications to your device.
+                    </p>
                   </div>
-                </React.Fragment>
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="notifications" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
-              <CardDescription>Manage how you receive notifications</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="notifications" className="flex flex-col space-y-1">
-                  <span>Enable Notifications</span>
-                  <span className="text-sm text-muted-foreground">
-                    Receive notifications for important events
-                  </span>
-                </Label>
-                <Switch 
-                  id="notifications" 
-                  checked={notifications} 
-                  onCheckedChange={setNotifications} 
-                />
-              </div>
-              
-              <div className="pt-4">
-                <Button onClick={saveSettings} disabled={loading}>
-                  {loading ? 'Saving...' : 'Save Settings'}
-                </Button>
+                  <Switch id="push" />
+                </div>
+                <div className="flex items-center justify-between rounded-md border p-3 shadow-sm">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium leading-none">
+                      Email Notifications
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Send email notifications to your inbox.
+                    </p>
+                  </div>
+                  <Switch id="email" defaultChecked />
+                </div>
+                <div className="flex items-center justify-between rounded-md border p-3 shadow-sm">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium leading-none">
+                      SMS Notifications
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Send SMS notifications to your phone.
+                    </p>
+                  </div>
+                  <Switch id="sms" />
+                </div>
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        </div>
+      </div>
     </div>
   );
 };

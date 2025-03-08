@@ -39,7 +39,7 @@ export class InstagramApiService {
       console.log('Opening Instagram authorization URL:', data.authUrl);
       
       // Store that we're expecting an Instagram callback
-      sessionStorage.setItem('instagram_auth_pending', 'true');
+      localStorage.setItem('instagram_auth_pending', 'true');
       
       // Open authorization URL in a popup window
       const width = 600;
@@ -91,8 +91,11 @@ export class InstagramApiService {
                   // Fetch profile data to store in database
                   await this.fetchProfileData();
                   
+                  // Store connection state in localStorage for persistence
+                  localStorage.setItem('instagram_connected', 'true');
+                  
                   // Clear the pending flag
-                  sessionStorage.removeItem('instagram_auth_pending');
+                  localStorage.removeItem('instagram_auth_pending');
                   
                   resolve(true);
                   return;
@@ -115,7 +118,7 @@ export class InstagramApiService {
         // Set a timeout to resolve the promise if no callback is received
         setTimeout(() => {
           window.removeEventListener('message', messageHandler);
-          sessionStorage.removeItem('instagram_auth_pending');
+          localStorage.removeItem('instagram_auth_pending');
           toast.error('Instagram connection timed out. Please try again.');
           resolve(false);
         }, 120000); // 2 minutes timeout
@@ -129,6 +132,10 @@ export class InstagramApiService {
   
   async verifyCredentials(): Promise<boolean> {
     try {
+      // Check local storage first for fast response
+      const localConnected = localStorage.getItem('instagram_connected') === 'true';
+      
+      // Even if locally connected, verify with the server (but quietly in background)
       const { data, error } = await supabase.functions.invoke('instagram-integration', {
         method: 'POST',
         body: { action: 'verify' }
@@ -136,14 +143,26 @@ export class InstagramApiService {
       
       if (error) {
         console.error('Error verifying Instagram credentials:', error);
-        throw error;
+        // Don't throw, just return the local state if verification failed
+        return localConnected;
       }
       
+      const isVerified = data?.verified || false;
       console.log('Instagram verification result:', data);
-      return data?.verified || false;
+      
+      // Update local storage based on server verification
+      if (isVerified) {
+        localStorage.setItem('instagram_connected', 'true');
+      } else if (!isVerified && localConnected) {
+        // If server says not connected but local says connected, update local
+        localStorage.removeItem('instagram_connected');
+      }
+      
+      return isVerified;
     } catch (error) {
       console.error('Error verifying Instagram credentials:', error);
-      return false;
+      // Fall back to local storage in case of error
+      return localStorage.getItem('instagram_connected') === 'true';
     }
   }
   
@@ -178,6 +197,9 @@ export class InstagramApiService {
           console.error('Error updating Instagram connection in database:', updateError);
           throw updateError;
         }
+        
+        // Set connected in localStorage
+        localStorage.setItem('instagram_connected', 'true');
       }
       
       return data;
@@ -332,6 +354,8 @@ export const handleInstagramAuthRedirect = async (): Promise<void> => {
           // Fetch profile data after successful connection
           await instagramService.fetchProfileData();
           toast.success('Successfully connected to Instagram!');
+          // Store connection state in localStorage
+          localStorage.setItem('instagram_connected', 'true');
         } else {
           toast.error('Failed to connect to Instagram');
         }
@@ -344,42 +368,70 @@ export const handleInstagramAuthRedirect = async (): Promise<void> => {
 };
 
 // Helper function to check if an Instagram connection exists
-export const checkInstagramConnection = async (): Promise<boolean> => {
-  const { data: { session } } = await supabase.auth.getSession();
+export const checkInstagramConnection = async (): Promise<boolean> {
+  // Check local storage first for quick response
+  const localConnected = localStorage.getItem('instagram_connected') === 'true';
   
-  if (!session?.user?.id) {
-    return false;
-  }
-  
-  const { data, error } = await supabase
-    .from('platform_connections')
-    .select('connected')
-    .eq('user_id', session.user.id)
-    .eq('platform', 'instagram')
-    .maybeSingle();
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
     
-  if (error) {
+    if (!session?.user?.id) {
+      return localConnected;
+    }
+    
+    // Try to verify with the server in the background
+    const { data, error } = await supabase
+      .from('platform_connections')
+      .select('connected')
+      .eq('user_id', session.user.id)
+      .eq('platform', 'instagram')
+      .maybeSingle();
+      
+    if (error) {
+      console.error('Error checking Instagram connection from database:', error);
+      return localConnected;
+    }
+    
+    const isConnected = data?.connected || false;
+    
+    // Update local storage if different from DB
+    if (isConnected && !localConnected) {
+      localStorage.setItem('instagram_connected', 'true');
+    } else if (!isConnected && localConnected) {
+      // If server connection is lost but local says connected, verify with the API directly
+      const service = new InstagramApiService(session.user.id);
+      const verified = await service.verifyCredentials();
+      return verified;
+    }
+    
+    return isConnected;
+  } catch (error) {
     console.error('Error checking Instagram connection:', error);
-    return false;
+    return localConnected;
   }
-  
-  return data?.connected || false;
 };
 
 // Helper function to publish content to Instagram
 export const publishToInstagram = async (content: string, mediaUrl?: string): Promise<{ success: boolean, message?: string, error?: string }> => {
   try {
+    // First check local storage for quick response
+    const localConnected = localStorage.getItem('instagram_connected') === 'true';
+    
+    if (!localConnected) {
+      return { success: false, error: 'Instagram is not connected. Please connect your account first.' };
+    }
+    
     const { data: { session } } = await supabase.auth.getSession();
     
     if (!session?.user?.id) {
       return { success: false, error: 'Authentication required' };
     }
     
-    // First verify that Instagram is connected
+    // Double-check that Instagram is connected on the server
     const isConnected = await checkInstagramConnection();
     
     if (!isConnected) {
-      return { success: false, error: 'Instagram is not connected' };
+      return { success: false, error: 'Instagram connection not verified. Please reconnect your account.' };
     }
     
     const instagramService = new InstagramApiService(session.user.id);

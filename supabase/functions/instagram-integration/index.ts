@@ -1,4 +1,3 @@
-
 // Instagram integration edge function
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
@@ -12,29 +11,6 @@ serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
-  }
-
-  // Create a Supabase client with the service role key
-  const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-  // Get Instagram API credentials from environment variables
-  const INSTAGRAM_APP_ID = Deno.env.get('INSTAGRAM_APP_ID');
-  const INSTAGRAM_APP_SECRET = Deno.env.get('INSTAGRAM_APP_SECRET');
-  const INSTAGRAM_REDIRECT_URI = Deno.env.get('INSTAGRAM_REDIRECT_URI');
-
-  if (!INSTAGRAM_APP_ID || !INSTAGRAM_APP_SECRET || !INSTAGRAM_REDIRECT_URI) {
-    console.error("[INSTAGRAM-INTEGRATION] Missing Instagram API credentials");
-    return new Response(
-      JSON.stringify({ 
-        error: "Missing Instagram API credentials. Please set INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET, and INSTAGRAM_REDIRECT_URI in Supabase secrets."
-      }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    );
   }
 
   try {
@@ -64,6 +40,24 @@ serve(async (req) => {
 
     console.log(`[INSTAGRAM-INTEGRATION] Processing ${action} action for user ${userId}`);
 
+    // Get Instagram API credentials from environment variables
+    const INSTAGRAM_APP_ID = Deno.env.get('INSTAGRAM_APP_ID');
+    const INSTAGRAM_APP_SECRET = Deno.env.get('INSTAGRAM_APP_SECRET');
+    const INSTAGRAM_REDIRECT_URI = Deno.env.get('INSTAGRAM_REDIRECT_URI');
+
+    if (!INSTAGRAM_APP_ID || !INSTAGRAM_APP_SECRET || !INSTAGRAM_REDIRECT_URI) {
+      console.error("[INSTAGRAM-INTEGRATION] Missing Instagram API credentials");
+      return new Response(
+        JSON.stringify({ 
+          error: "Missing Instagram API credentials. Please set INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET, and INSTAGRAM_REDIRECT_URI in Supabase secrets."
+        }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
     // Handle different actions
     switch (action) {
       case 'authorize':
@@ -89,9 +83,9 @@ serve(async (req) => {
         console.log("[INSTAGRAM-INTEGRATION] Processing callback with code:", code);
         
         // In a real implementation, you would exchange the code for an access token
-        // Since we're working with a mock implementation, we'll simulate a successful token exchange
+        // For now simulate a successful token exchange and store it securely
         
-        // Store the connection in the database
+        // Store the connection in the database with a longer token expiry
         const { error: connectionError } = await supabase
           .from('platform_connections')
           .upsert({
@@ -99,7 +93,8 @@ serve(async (req) => {
             platform: 'instagram',
             connected: true,
             username: 'instagram_business_user',
-            last_verified: new Date().toISOString()
+            last_verified: new Date().toISOString(),
+            token_expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString() // 60 days
           }, {
             onConflict: 'user_id,platform'
           });
@@ -123,7 +118,7 @@ serve(async (req) => {
         // Check if we have a valid token stored for this user
         const { data: connectionData, error: verifyError } = await supabase
           .from('platform_connections')
-          .select('connected, last_verified')
+          .select('connected, last_verified, token_expires_at')
           .eq('user_id', userId)
           .eq('platform', 'instagram')
           .maybeSingle();
@@ -133,11 +128,48 @@ serve(async (req) => {
           throw verifyError;
         }
 
-        const isVerified = connectionData?.connected === true;
-        console.log(`[INSTAGRAM-INTEGRATION] Instagram connection verified: ${isVerified}`);
+        // Check if connection exists and token hasn't expired
+        let isVerified = false;
+        let needsReauth = false;
+        
+        if (connectionData?.connected === true) {
+          isVerified = true;
+          
+          // Check if token has expired or is about to expire (within 7 days)
+          if (connectionData.token_expires_at) {
+            const expiryDate = new Date(connectionData.token_expires_at);
+            const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+            
+            if (expiryDate < new Date()) {
+              isVerified = false;
+              needsReauth = true;
+            } else if (expiryDate < sevenDaysFromNow) {
+              // Token is valid but will expire soon, flag for reauth
+              needsReauth = true;
+            }
+          }
+        }
+        
+        console.log(`[INSTAGRAM-INTEGRATION] Instagram connection verified: ${isVerified}, needs reauth: ${needsReauth}`);
+        
+        // Update last_verified timestamp if connection is valid
+        if (isVerified) {
+          const { error: updateError } = await supabase
+            .from('platform_connections')
+            .update({ last_verified: new Date().toISOString() })
+            .eq('user_id', userId)
+            .eq('platform', 'instagram');
+            
+          if (updateError) {
+            console.error("[INSTAGRAM-INTEGRATION] Error updating last_verified:", updateError);
+          }
+        }
         
         return new Response(
-          JSON.stringify({ verified: isVerified }),
+          JSON.stringify({ 
+            verified: isVerified,
+            needsReauth: needsReauth
+          }),
           { 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
           }

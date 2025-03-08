@@ -17,10 +17,17 @@ import Settings from "./pages/Settings";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import RequireAuth from "./components/RequireAuth";
-import { handleInstagramAuthRedirect } from "./services/instagramApiService";
+import { handleInstagramAuthRedirect, checkInstagramConnection } from "./services/instagramApiService";
 
 // Create a client
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      retry: 1,
+    },
+  },
+});
 
 // Separate routes component to use location hooks safely
 function AppRoutes() {
@@ -34,6 +41,11 @@ function AppRoutes() {
     if (code) {
       console.log('Detected Instagram auth code in URL, handling redirect');
       handleInstagramAuthRedirect();
+    } else {
+      // Verify Instagram connection on app load (quietly in background)
+      checkInstagramConnection().then(connected => {
+        console.log('Instagram connection status on app load:', connected);
+      });
     }
   }, [location]);
 

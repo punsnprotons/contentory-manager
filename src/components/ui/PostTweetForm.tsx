@@ -1,93 +1,177 @@
+import React, { useState, useEffect } from 'react';
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Twitter, Instagram, Loader2 } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
+import InstagramConnectionStatus from '@/components/instagram/InstagramConnectionStatus';
+import { publishToInstagram, checkInstagramConnection } from '@/services/instagramApiService';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
-import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Send, Loader2 } from 'lucide-react';
-import { publishToTwitter } from '@/components/ui/RefreshDataButton';
-import { TwitterApiService } from '@/services/twitterApiService';
-import { useAuth } from '@/hooks/useAuth';
-import { toast } from 'sonner';
-
-interface PostTweetFormProps {
-  onSuccess?: () => void;
-  className?: string;
-}
-
-const PostTweetForm: React.FC<PostTweetFormProps> = ({ onSuccess, className }) => {
+const PostTweetForm = ({ 
+  onSubmit 
+}: { 
+  onSubmit: (content: string) => void 
+}) => {
   const [content, setContent] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const { session } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const canSubmit = content.length > 0 && content.length <= 280;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Add state for Instagram connection
+  const [instagramConnected, setInstagramConnected] = useState(false);
+  const [checkingInstagram, setCheckingInstagram] = useState(true);
+  const [showConnectDialog, setShowConnectDialog] = useState(false);
+  
+  // Check Instagram connection on mount
+  useEffect(() => {
+    const checkInsta = async () => {
+      try {
+        const connected = await checkInstagramConnection();
+        setInstagramConnected(connected);
+      } catch (error) {
+        console.error('Error checking Instagram connection:', error);
+      } finally {
+        setCheckingInstagram(false);
+      }
+    };
+    
+    checkInsta();
+  }, []);
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
+    onSubmit(content);
+    setContent('');
+    setIsSubmitting(false);
+  };
 
-    if (!content.trim()) {
-      toast.error('Tweet content cannot be empty.');
+  const handleCheckCharCount = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setContent(e.target.value);
+  };
+
+  // Add Instagram publishing functionality
+  const handleInstagramSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Verify Instagram connection first
+    const connected = await checkInstagramConnection();
+    
+    if (!connected) {
+      setShowConnectDialog(true);
       return;
     }
-
-    setIsLoading(true);
+    
+    setIsSubmitting(true);
+    
     try {
-      if (!session?.user) {
-        toast.error('You must be logged in to post a tweet.');
-        return;
-      }
-
-      const result = await publishToTwitter(content);
-
+      const result = await publishToInstagram(content);
+      
       if (result.success) {
-        toast.success(result.message || 'Successfully posted to Twitter!');
+        toast.success(result.message || 'Successfully published to Instagram!');
         setContent('');
-        if (onSuccess) {
-          onSuccess();
-        }
       } else {
-        toast.error(result.message || 'Failed to post to Twitter.');
+        toast.error(result.error || 'Failed to publish to Instagram');
+        
+        // If connection issue, show connection dialog
+        if (result.error?.includes('not connected')) {
+          setShowConnectDialog(true);
+        }
       }
     } catch (error) {
-      console.error('Error posting tweet:', error);
-      toast.error('Failed to post to Twitter. Please try again.');
+      console.error('Error publishing to Instagram:', error);
+      toast.error('Failed to publish to Instagram');
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
+  const handleInstagramConnected = () => {
+    setInstagramConnected(true);
+    setShowConnectDialog(false);
+  };
+  
   return (
-    <Card className={className}>
-      <CardHeader>
-        <CardTitle>Post to Twitter</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Textarea
-                placeholder="What's on your mind?"
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                rows={3}
-                disabled={isLoading}
-              />
-            </div>
-          </div>
-        </form>
-      </CardContent>
-      <CardFooter className="justify-between">
-        <Button type="submit" onClick={handleSubmit} disabled={isLoading}>
-          {isLoading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Posting...
-            </>
-          ) : (
-            <>
-              Post <Send className="ml-2 h-4 w-4" />
-            </>
+    <div className="border rounded-lg p-4 shadow-sm">
+      <div className="mb-4">
+        <Label htmlFor="tweet">What's on your mind?</Label>
+        <Textarea
+          id="tweet"
+          placeholder="Type your tweet here..."
+          value={content}
+          onChange={handleCheckCharCount}
+          rows={4}
+          className="resize-none mt-2"
+        />
+      </div>
+      
+      <div className="mt-4 flex flex-wrap gap-2 justify-between items-center">
+        <div className="flex items-center text-sm text-gray-500">
+          {content.length}/280
+          {content.length > 280 && (
+            <span className="text-red-500 ml-1"> - Character limit exceeded</span>
           )}
-        </Button>
-      </CardFooter>
-    </Card>
+        </div>
+        <div className="flex gap-2">
+          <Button 
+            type="submit" 
+            onClick={handleSubmit}
+            disabled={isSubmitting || !canSubmit}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Posting...
+              </>
+            ) : (
+              <>
+                <Twitter className="mr-2 h-4 w-4" />
+                Post to Twitter
+              </>
+            )}
+          </Button>
+          
+          {/* Add Instagram button */}
+          <Button 
+            type="button"
+            variant="outline"
+            onClick={handleInstagramSubmit}
+            disabled={isSubmitting || !content || checkingInstagram}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Posting...
+              </>
+            ) : (
+              <>
+                <Instagram className="mr-2 h-4 w-4" />
+                Post to Instagram
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+      
+      {/* Instagram Connect Dialog */}
+      <Dialog open={showConnectDialog} onOpenChange={setShowConnectDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Connect to Instagram</DialogTitle>
+            <DialogDescription>
+              You need to connect your Instagram account before posting.
+            </DialogDescription>
+          </DialogHeader>
+          <InstagramConnectionStatus onConnected={handleInstagramConnected} />
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 };
 
