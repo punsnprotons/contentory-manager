@@ -69,7 +69,13 @@ const InstagramConnectionStatus = ({ onConnected, minimal = false }: InstagramCo
     } catch (error) {
       console.error('Error connecting to Instagram:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      setConnectionError(`Instagram connection error: ${errorMessage}`);
+      
+      // Check for specific Instagram scope errors
+      if (errorMessage.includes('Invalid scope') || errorMessage.toLowerCase().includes('scope')) {
+        setConnectionError('Instagram API scope error. Please check the Instagram API permissions in your Meta Developer Portal.');
+      } else {
+        setConnectionError(`Instagram connection error: ${errorMessage}`);
+      }
       toast.error('Error connecting to Instagram');
     } finally {
       setIsConnecting(false);
@@ -129,9 +135,11 @@ const InstagramConnectionStatus = ({ onConnected, minimal = false }: InstagramCo
               <p>Possible solutions:</p>
               <ul className="list-disc ml-5 mt-1">
                 <li>Make sure your Instagram App has "Instagram Basic Display" product added</li>
-                <li>Ensure the "user_profile" and "user_media" permissions are approved in the Meta Developer Portal</li>
+                <li>Ensure the correct permission scopes are configured in Meta Developer Portal</li>
+                <li>For Instagram Basic Display API, use <code>instagram_graph_user_profile</code> and <code>instagram_graph_user_media</code> as scopes</li>
                 <li>Verify your redirect URI matches exactly in both Supabase and Meta Developer Portal</li>
                 <li>Check that your app is in "Live" mode in the Meta Developer Portal</li>
+                <li>Make sure your Instagram test users are properly configured if in development mode</li>
               </ul>
               <a 
                 href="https://developers.facebook.com/apps/" 
