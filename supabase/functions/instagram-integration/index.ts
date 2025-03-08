@@ -67,12 +67,53 @@ serve(async (req) => {
     // Handle different actions
     switch (action) {
       case 'authorize':
-        // Generate Instagram authorization URL
-        const authUrl = `https://api.instagram.com/oauth/authorize?client_id=${INSTAGRAM_APP_ID}&redirect_uri=${encodeURIComponent(INSTAGRAM_REDIRECT_URI)}&scope=user_profile,user_media&response_type=code`;
+        // Generate Instagram business authorization URL with expanded permissions
+        const businessAuthUrl = `https://www.instagram.com/oauth/authorize?enable_fb_login=0&force_authentication=1&client_id=${INSTAGRAM_APP_ID}&redirect_uri=${encodeURIComponent(INSTAGRAM_REDIRECT_URI)}&response_type=code&scope=instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish,instagram_business_manage_insights`;
         
-        console.log("[INSTAGRAM-INTEGRATION] Generated auth URL:", authUrl);
+        console.log("[INSTAGRAM-INTEGRATION] Generated business auth URL:", businessAuthUrl);
         return new Response(
-          JSON.stringify({ authUrl }),
+          JSON.stringify({ authUrl: businessAuthUrl }),
+          { 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+
+      case 'callback':
+        // Process the callback with auth code from Instagram
+        const code = reqBody.code;
+        
+        if (!code) {
+          throw new Error('No authorization code provided');
+        }
+        
+        console.log("[INSTAGRAM-INTEGRATION] Processing callback with code:", code);
+        
+        // In a real implementation, you would exchange the code for an access token
+        // For now, simulate a successful token exchange
+        
+        // Store the connection in the database
+        const { error: connectionError } = await supabase
+          .from('platform_connections')
+          .upsert({
+            user_id: userId,
+            platform: 'instagram',
+            connected: true,
+            username: 'instagram_business_user',
+            last_verified: new Date().toISOString()
+          }, {
+            onConflict: 'user_id,platform'
+          });
+
+        if (connectionError) {
+          console.error("[INSTAGRAM-INTEGRATION] Error updating connection:", connectionError);
+          throw connectionError;
+        }
+
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: "Successfully connected to Instagram Business" 
+          }),
           { 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
           }
@@ -109,12 +150,13 @@ serve(async (req) => {
         
         // In a real implementation, you would use the stored access token to call the Instagram API
         const mockProfileData = {
-          username: "instagram_user",
+          username: "instagram_business_user",
           profile_picture: "https://via.placeholder.com/150",
-          full_name: "Instagram User",
-          bio: "This is a mock Instagram profile",
+          full_name: "Instagram Business User",
+          bio: "This is a mock Instagram business profile",
           website: "https://instagram.com",
-          is_business: false,
+          is_business: true,
+          business_category: "Marketing",
           counts: {
             media: 42,
             follows: 150,
