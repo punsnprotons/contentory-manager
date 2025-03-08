@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Twitter, Instagram, Loader2 } from "lucide-react";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner"; // Update import to use sonner directly
 import InstagramConnectionStatus from '@/components/instagram/InstagramConnectionStatus';
 import { publishToInstagram, checkInstagramConnection } from '@/services/instagramApiService';
 import {
@@ -74,10 +75,16 @@ const PostTweetForm = ({
       const result = await publishToInstagram(content);
       
       if (result.success) {
-        toast.success(result.message || 'Successfully published to Instagram!');
+        toast(result.message || 'Successfully published to Instagram!', {
+          description: "Your content has been posted to Instagram",
+          duration: 3000
+        });
         setContent('');
       } else {
-        toast.error(result.error || 'Failed to publish to Instagram');
+        toast(result.error || 'Failed to publish to Instagram', {
+          description: "There was an error posting to Instagram",
+          duration: 5000
+        });
         
         // If connection issue, show connection dialog
         if (result.error?.includes('not connected')) {
@@ -86,7 +93,10 @@ const PostTweetForm = ({
       }
     } catch (error) {
       console.error('Error publishing to Instagram:', error);
-      toast.error('Failed to publish to Instagram');
+      toast('Failed to publish to Instagram', {
+        description: "An unexpected error occurred",
+        duration: 5000
+      });
     } finally {
       setIsSubmitting(false);
     }
