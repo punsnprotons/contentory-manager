@@ -1,4 +1,3 @@
-
 // Instagram integration edge function
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
@@ -73,9 +72,9 @@ serve(async (req) => {
     // Handle different actions
     switch (action) {
       case 'authorize':
-        // Generate Instagram authorization URL with minimal scopes
-        // The simplest approach is to just use 'basic' - we'll let the Meta Developer Portal determine what's available
-        const authUrl = `https://api.instagram.com/oauth/authorize?client_id=${INSTAGRAM_APP_ID}&redirect_uri=${encodeURIComponent(INSTAGRAM_REDIRECT_URI)}&scope=basic&response_type=code`;
+        // Generate Instagram authorization URL with the correct scope for Instagram Basic Display API
+        // The correct scope for Instagram Basic Display API is 'user_profile,user_media'
+        const authUrl = `https://api.instagram.com/oauth/authorize?client_id=${INSTAGRAM_APP_ID}&redirect_uri=${encodeURIComponent(INSTAGRAM_REDIRECT_URI)}&scope=user_profile,user_media&response_type=code`;
         
         console.log("[INSTAGRAM-INTEGRATION] Generated auth URL:", authUrl);
         return new Response(

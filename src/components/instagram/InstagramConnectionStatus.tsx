@@ -130,7 +130,7 @@ const InstagramConnectionStatus = ({ onConnected, minimal = false }: InstagramCo
               <p>Possible solutions:</p>
               <ul className="list-disc ml-5 mt-1">
                 <li>Make sure your Instagram App has "Instagram Basic Display" product added</li>
-                <li>Ensure the "basic" permission is approved in the Meta Developer Portal</li>
+                <li>Ensure the "user_profile" and "user_media" permissions are approved in the Meta Developer Portal</li>
                 <li>Verify your redirect URI matches exactly in both Supabase and Meta Developer Portal</li>
                 <li>Check that your app is in "Live" mode in the Meta Developer Portal</li>
               </ul>
