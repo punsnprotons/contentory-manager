@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { TwitterApiService } from '@/services/twitterApiService';
+import { InstagramApiService } from '@/services/instagramApiService';
 import { toast } from 'sonner';
 import { PlusCircle, Twitter, Instagram, CheckCircle, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 
@@ -319,6 +320,67 @@ const Settings = () => {
     }
   };
 
+  const connectInstagram = async () => {
+    if (!session?.user) {
+      toast.error('You must be logged in to connect Instagram');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      console.log("Settings: Connecting Instagram");
+      const instagramService = new InstagramApiService(session.user.id);
+      toast.info('Verifying Instagram credentials...');
+      
+      const connected = await instagramService.connect();
+      
+      if (connected) {
+        toast.success('Successfully initiated Instagram connection. Please complete authorization in the popup window.');
+      } else {
+        toast.error('Failed to connect Instagram. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error connecting Instagram:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to connect Instagram';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const importInstagramPosts = async () => {
+    if (!session?.user) {
+      toast.error('You must be logged in to import Instagram posts');
+      return;
+    }
+    
+    setImportLoading(true);
+    try {
+      console.log("Settings: Importing Instagram posts");
+      const instagramService = await InstagramApiService.create(session);
+      
+      if (!instagramService) {
+        throw new Error('Could not initialize Instagram service');
+      }
+      
+      const result = await instagramService.fetchUserPosts(30);
+      
+      console.log("Settings: Import result", result);
+      if (result && Array.isArray(result)) {
+        toast.success(`Successfully imported ${result.length} posts from Instagram`);
+      } else {
+        toast.success('Instagram import completed');
+      }
+      
+      await loadConnections();
+    } catch (error) {
+      console.error('Error importing Instagram posts:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to import posts');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
   const fetchTwitterProfile = async () => {
     if (!session?.user) {
       toast.error('You must be logged in to fetch profile data');
@@ -342,6 +404,35 @@ const Settings = () => {
       await loadConnections();
     } catch (error) {
       console.error('Error fetching Twitter profile:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to fetch profile data');
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const fetchInstagramProfile = async () => {
+    if (!session?.user) {
+      toast.error('You must be logged in to fetch profile data');
+      return;
+    }
+    
+    setProfileLoading(true);
+    try {
+      console.log("Settings: Fetching Instagram profile data");
+      const instagramService = await InstagramApiService.create(session);
+      
+      if (!instagramService) {
+        throw new Error('Could not initialize Instagram service');
+      }
+      
+      const profileData = await instagramService.fetchProfileData();
+      
+      console.log("Settings: Profile data fetched", profileData);
+      toast.success('Successfully fetched and stored Instagram profile data');
+      
+      await loadConnections();
+    } catch (error) {
+      console.error('Error fetching Instagram profile:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to fetch profile data');
     } finally {
       setProfileLoading(false);
@@ -466,10 +557,11 @@ const Settings = () => {
                           <Button 
                             variant="outline" 
                             size="sm"
-                            onClick={fetchTwitterProfile}
-                            disabled={profileLoading || connection.platform !== 'twitter'}
+                            onClick={connection.platform === 'twitter' ? fetchTwitterProfile : 
+                                     connection.platform === 'instagram' ? fetchInstagramProfile : undefined}
+                            disabled={profileLoading}
                           >
-                            {profileLoading && connection.platform === 'twitter' ? (
+                            {profileLoading ? (
                               <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                 Updating...
@@ -484,10 +576,11 @@ const Settings = () => {
                           <Button 
                             variant="outline" 
                             size="sm"
-                            onClick={connection.platform === 'twitter' ? importTwitterTweets : undefined}
-                            disabled={importLoading || connection.platform !== 'twitter'}
+                            onClick={connection.platform === 'twitter' ? importTwitterTweets : 
+                                     connection.platform === 'instagram' ? importInstagramPosts : undefined}
+                            disabled={importLoading}
                           >
-                            {importLoading && connection.platform === 'twitter' ? (
+                            {importLoading ? (
                               <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                 Importing...
@@ -502,11 +595,12 @@ const Settings = () => {
                         <Button 
                           variant="outline" 
                           size="sm"
-                          onClick={connection.platform === 'twitter' ? connectTwitter : undefined}
-                          disabled={loading || connection.platform !== 'twitter' || rateLimited}
-                          className={rateLimited && connection.platform === 'twitter' ? "bg-red-50" : ""}
+                          onClick={connection.platform === 'twitter' ? connectTwitter : 
+                                   connection.platform === 'instagram' ? connectInstagram : undefined}
+                          disabled={loading || (connection.platform === 'twitter' && rateLimited)}
+                          className={(rateLimited && connection.platform === 'twitter') ? "bg-red-50" : ""}
                         >
-                          {loading && connection.platform === 'twitter' ? (
+                          {loading ? (
                             <>
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                               Connecting...
